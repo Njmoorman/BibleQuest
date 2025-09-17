@@ -13,7 +13,7 @@ workflows:
         distribution_type: app_store
         bundle_identifier: com.base44.biblequest
         automatic_signing: true
-        team_id: YOUR_TEAM_ID_HERE  # <-- Replace with your real Apple Developer Team ID
+        team_id: 2989BXM365  # <-- Replace with your real Apple Developer Team ID
     scripts:
       - name: Install .NET SDK
         script: |
