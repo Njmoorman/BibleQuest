@@ -1,4 +1,3 @@
-
 workflows:
   maui-ios-build:
     name: Build and Deploy MAUI iOS App
@@ -12,21 +11,31 @@ workflows:
           wget https://dot.net/v1/dotnet-install.sh -O dotnet-install.sh
           chmod +x dotnet-install.sh
           ./dotnet-install.sh -v $DOTNET_VERSION
+        working_directory: BibleQuestForKids
+
       - name: Print dotnet version (for debugging)
         script: |
           export PATH="$HOME/.dotnet:$PATH"
           dotnet --version
+        working_directory: BibleQuestForKids
+
       - name: Install MAUI workload
         script: |
           export PATH="$HOME/.dotnet:$PATH"
           dotnet workload install maui
+        working_directory: BibleQuestForKids
+
       - name: Restore dependencies
         script: |
           export PATH="$HOME/.dotnet:$PATH"
           dotnet restore
+        working_directory: BibleQuestForKids
+
       - name: Build iOS app
         script: |
           export PATH="$HOME/.dotnet:$PATH"
           dotnet publish -f net8.0-ios -c Release
+        working_directory: BibleQuestForKids
+
     artifacts:
       - '**/bin/Release/**/*.ipa'
