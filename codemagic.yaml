@@ -12,6 +12,9 @@ workflows:
           chmod +x dotnet-install.sh
           ./dotnet-install.sh -v $DOTNET_VERSION
           echo 'export PATH=$HOME/.dotnet:$PATH' >> $CM_ENV
+      - name: Print dotnet version (for debugging)
+        script: |
+          dotnet --version
       - name: Install MAUI workload
         script: |
           dotnet workload install maui
