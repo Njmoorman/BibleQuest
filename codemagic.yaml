@@ -11,18 +11,21 @@ workflows:
           wget https://dot.net/v1/dotnet-install.sh -O dotnet-install.sh
           chmod +x dotnet-install.sh
           ./dotnet-install.sh -v $DOTNET_VERSION
-          echo 'export PATH=$HOME/.dotnet:$PATH' >> $CM_ENV
       - name: Print dotnet version (for debugging)
         script: |
+          export PATH="$HOME/.dotnet:$PATH"
           dotnet --version
       - name: Install MAUI workload
         script: |
+          export PATH="$HOME/.dotnet:$PATH"
           dotnet workload install maui
       - name: Restore dependencies
         script: |
+          export PATH="$HOME/.dotnet:$PATH"
           dotnet restore
       - name: Build iOS app
         script: |
+          export PATH="$HOME/.dotnet:$PATH"
           dotnet publish -f net8.0-ios -c Release
     artifacts:
       - '**/bin/Release/**/*.ipa'
