@@ -8,6 +8,10 @@
     <SingleProject>true</SingleProject>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <ApplicationId>com.base44.biblequest</ApplicationId>
+    <SupportedOSPlatformVersion>13.0</SupportedOSPlatformVersion>
+    <SupportedOrientations>Portrait Landscape</SupportedOrientations>
+
   </PropertyGroup>
 
   <ItemGroup>
