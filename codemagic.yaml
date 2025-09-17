@@ -1,20 +1,28 @@
-
 workflows:
   maui-ios-build:
     name: Build and Deploy MAUI iOS App
     environment:
       xcode: latest
       vars:
-        DOTNET_VERSION: 8.0.x
-    scripts:
-      - name: Install .NET MAUI
-        script: |
-          dotnet workload install maui
-      - name: Restore dependencies
-        script: |
-          dotnet restore
-      - name: Build iOS app
-        script: |
-          dotnet publish -f net8.0-ios -c Release
+        DOTNET_VERSION: 8.0.301
+      scripts:
+        - name: Install .NET SDK
+          script: |
+            wget https://dot.net/v1/dotnet-install.sh -O dotnet-install.sh
+            chmod +x dotnet-install.sh
+            ./dotnet-install.sh -v $DOTNET_VERSION
+            export PATH=$PATH:$HOME/.dotnet
+        - name: Install MAUI workload
+          script: |
+            export PATH=$PATH:$HOME/.dotnet
+            dotnet workload install maui
+        - name: Restore dependencies
+          script: |
+            export PATH=$PATH:$HOME/.dotnet
+            dotnet restore
+        - name: Build iOS app
+          script: |
+            export PATH=$PATH:$HOME/.dotnet
+            dotnet publish -f net8.0-ios -c Release
     artifacts:
       - '**/bin/Release/**/*.ipa'
