@@ -1,44 +1,25 @@
 workflows:
   maui-ios-build:
-    name: Build and Deploy MAUI iOS App
+    name: Build iOS .NET MAUI App
+    max_build_duration: 60
     environment:
-      xcode: latest
       vars:
-        DOTNET_VERSION: 8.0.301
-    triggering:
-      events:
-        - push
-    signing:
-      ios:
-        distribution_type: app_store
-        bundle_identifier: com.base44.biblequest
-        automatic_signing: true
-        team_id: 2989BXM365  # <-- Replace with your real Apple Developer Team ID
+        DOTNET_VERSION: "8.0.x"
+      xcode: latest
     scripts:
       - name: Install .NET SDK
         script: |
-          wget https://dot.net/v1/dotnet-install.sh -O dotnet-install.sh
-          chmod +x dotnet-install.sh
-          ./dotnet-install.sh -v $DOTNET_VERSION
-        working_directory: BibleQuestForKids
-
-      - name: Install MAUI workload
-        script: |
-          export PATH="$HOME/.dotnet:$PATH"
-          dotnet workload install maui
-        working_directory: BibleQuestForKids
-
+          export DOTNET_ROOT=$HOME/dotnet
+          export PATH=$DOTNET_ROOT:$PATH
+          curl -sSL https://dot.net/v1/dotnet-install.sh | bash /dev/stdin --channel $DOTNET_VERSION
       - name: Restore dependencies
+        script: dotnet restore
+      - name: Build for iOS
         script: |
-          export PATH="$HOME/.dotnet:$PATH"
-          dotnet restore
-        working_directory: BibleQuestForKids
-
-      - name: Build iOS app
-        script: |
-          export PATH="$HOME/.dotnet:$PATH"
-          dotnet publish -f net8.0-ios -c Release
-        working_directory: BibleQuestForKids
-
+          dotnet build YourAppName.sln -c Release -f:net8.0-ios /p:Platform=iPhone
     artifacts:
-      - '**/bin/Release/**/*.ipa'
+      - build/ios/**/*.ipa
+    publishing:
+      email:
+        recipients:
+          - jordy.moorman@gmail.com
