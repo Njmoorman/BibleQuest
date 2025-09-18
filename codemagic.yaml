@@ -17,11 +17,10 @@ workflows:
       node: 18.16.0
       vars:
         DOTNET_ROOT: /usr/local/share/dotnet
-        APP_IDENTIFIER: $BUNDLE_ID
-        TEAM_ID: $TEAM_ID
+        APP_IDENTIFIER: app.biblequest
+        TEAM_ID: 2989BXM365
       groups:
-        - ios_signing             # CERTIFICATE_*, PROVISIONING_PROFILE, KEYCHAIN_PASSWORD
-        - app_store_connect       # APP_STORE_CONNECT_* variables
+        - ios_signing        # CERTIFICATE_*, PROVISIONING_PROFILE, KEYCHAIN_PASSWORD
     triggering:
       events:
         - push
@@ -34,35 +33,50 @@ workflows:
           set -euo pipefail
           brew install --cask dotnet-sdk
           export PATH="$DOTNET_ROOT:$PATH"
-          dotnet --version
+          dotnet --info
+
+      - name: Install MAUI workload
+        script: |
+          set -euo pipefail
+          export PATH="$DOTNET_ROOT:$PATH"
+          dotnet workload install maui --skip-manifest-update
+
       - name: Build bundled web assets (npm)
         script: |
+          set -euo pipefail
           cd BibleQuestForKids/wwwroot
           npm ci
           npm run build
-      - name: Restore & publish MAUI iOS app
+
+      - name: Restore NuGet packages
         script: |
           set -euo pipefail
           export PATH="$DOTNET_ROOT:$PATH"
           dotnet restore BibleQuestForKids/BibleQuestForKids.csproj
+
+      - name: Publish .NET MAUI iOS app
+        script: |
+          set -euo pipefail
+          export PATH="$DOTNET_ROOT:$PATH"
           dotnet publish BibleQuestForKids/BibleQuestForKids.csproj \
             -c Release \
             -f net8.0-ios \
             -p:RuntimeIdentifier=ios-arm64 \
             -p:ArchiveOnBuild=true \
             -p:CreatePackage=true
+
       - name: Collect IPA
         script: |
+          set -euo pipefail
           mkdir -p output
-          find BibleQuestForKids/bin/Release/net8.0-ios/ios-arm64/publish -name '*.ipa' \
-            -exec cp {} output/ \;
+          find BibleQuestForKids/bin/Release/net8.0-ios/ios-arm64/publish -maxdepth 1 -name '*.ipa' \
+            -print -exec cp {} output/ \;
+
     artifacts:
       - output/*.ipa
+
     publishing:
       app_store_connect:
-        auth: api_key
-        key_id: $APP_STORE_CONNECT_KEY_ID
-        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
-        private_key: $APP_STORE_CONNECT_KEY
+        auth: integration     # Uses Codemagic App Store Connect integration
         submit_to_testflight: true
         submit_to_app_store: false
