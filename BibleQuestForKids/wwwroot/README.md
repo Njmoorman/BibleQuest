@@ -11,10 +11,17 @@ npm install
 npm run dev
 ```
 
-## Building the app
+## Building the app for .NET MAUI
 
 ```bash
 npm run build
 ```
 
-For more information and support, please contact Base44 support at app@base44.com.
+This command outputs production assets into `wwwroot/dist`. The .NET MAUI
+project bundles everything in that folder as `MauiAsset` items and copies the
+folder to local storage when the app loads. Codemagic also runs `npm ci` and
+`npm run build` during iOS builds so TestFlight and App Store submissions always
+ship the latest React bundle.
+
+For more information and support, please contact Base44 support at
+app@base44.com.

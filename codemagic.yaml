@@ -1,16 +1,11 @@
 # ==========================================================
 # Bible Quest iOS Build — Codemagic Workflow
 #
-# CURRENT MODE: TestFlight Deployment (internal/external testers)
-# TO DEPLOY TO APP STORE:
-#    1. Set `submit_to_testflight: false`
-#    2. Set `submit_to_app_store: true`
-#    3. Confirm app metadata and screenshots in App Store Connect
+# Default mode ships to TestFlight. When you're ready for the
+# App Store, flip the two flags under `publishing.app_store_connect`:
+#   submit_to_testflight: false
+#   submit_to_app_store: true
 # ==========================================================
-
-
-# Bible Quest iOS App – Codemagic YAML for .NET MAUI
-# To deploy to App Store later, change `submit_to_testflight` to `submit_to_app_store: true`
 
 workflows:
   bible-quest-ios:
@@ -19,19 +14,14 @@ workflows:
     environment:
       xcode: latest
       cocoapods: default
+      node: 18.16.0
       vars:
         DOTNET_ROOT: /usr/local/share/dotnet
-        APP_STORE_CONNECT_ISSUER_ID: <your-issuer-id> # 👈 Already handled in secrets
-        APP_STORE_CONNECT_KEY_IDENTIFIER: 3J6J67QJ9K
-        APP_STORE_CONNECT_PRIVATE_KEY: Encrypted private key in env
-        CERTIFICATE_PRIVATE_KEY: Encrypted .p12 in env
-        PROVISIONING_PROFILE: Encrypted .mobileprovision in env
         APP_IDENTIFIER: com.base44.biblequest
         TEAM_ID: 2989BXM365
       groups:
-        - app_store_credentials
-        - signing_credentials
-      node: 18.16.0
+        - app_store_connect       # APP_STORE_CONNECT_* secrets (base64 allowed)
+        - ios_signing             # CERTIFICATE_*, PROVISIONING_PROFILE, KEYCHAIN_PASSWORD
     triggering:
       events:
         - push
@@ -41,21 +31,90 @@ workflows:
     scripts:
       - name: Install .NET SDK
         script: |
+          set -euo pipefail
           brew install --cask dotnet-sdk
-          export PATH="/usr/local/share/dotnet:$PATH"
-          dotnet --version
-      - name: Restore & build MAUI app
+          export PATH="$DOTNET_ROOT:$PATH"
+          dotnet --info
+      - name: Install MAUI workload
         script: |
-          dotnet workload install maui
-          dotnet restore
-          dotnet build BibleQuest.sln -c Release -f:net8.0-ios /p:Platform=iPhone /p:BuildIpa=true
-      - name: Package IPA
+          set -euo pipefail
+          export PATH="$DOTNET_ROOT:$PATH"
+          dotnet workload install maui --skip-manifest-update
+      - name: Install signing assets
         script: |
+          set -euo pipefail
+
+          KEYCHAIN="$HOME/Library/Keychains/codemagic.keychain-db"
+          KEYCHAIN_PASSWORD=${KEYCHAIN_PASSWORD:-"codemagic"}
+          CERT_P12="$HOME/certificate.p12"
+          PROFILE_PATH="$HOME/profile.mobileprovision"
+
+          echo "$CERTIFICATE_PRIVATE_KEY" | base64 --decode > "$CERT_P12"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import "$CERT_P12" -k "$KEYCHAIN" -P "$CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security list-keychains -d user -s "$KEYCHAIN" "$HOME/Library/Keychains/login.keychain-db"
+          security default-keychain -d user -s "$KEYCHAIN"
+
+          echo "$PROVISIONING_PROFILE" | base64 --decode > "$PROFILE_PATH"
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+          PROFILE_UUID=$(/usr/libexec/PlistBuddy -c 'Print UUID' /dev/stdin <<< "$(security cms -D -i \"$PROFILE_PATH\")")
+          cp "$PROFILE_PATH" "$HOME/Library/MobileDevice/Provisioning Profiles/$PROFILE_UUID.mobileprovision"
+
+          CODESIGN_KEY=$(security find-identity -v -p codesigning "$KEYCHAIN" | head -n 1 | awk -F '"' '{print $2}')
+          if [ -z "$CODESIGN_KEY" ]; then
+            echo "No signing identity found in imported certificate." >&2
+            exit 1
+          fi
+
+          {
+            echo "CODESIGN_KEY=$CODESIGN_KEY"
+            echo "PROVISIONING_PROFILE_UUID=$PROFILE_UUID"
+            echo "APP_STORE_CONNECT_PRIVATE_KEY_DECODED<<'EOF'"
+            echo "$APP_STORE_CONNECT_PRIVATE_KEY" | base64 --decode
+            echo "EOF"
+          } >> "$CM_ENV"
+
+          rm -f "$CERT_P12" "$PROFILE_PATH"
+      - name: Build bundled web assets (npm)
+        script: |
+          set -euo pipefail
+          cd BibleQuestForKids/wwwroot
+          npm ci
+          npm run build
+      - name: Restore NuGet packages
+        script: |
+          set -euo pipefail
+          export PATH="$DOTNET_ROOT:$PATH"
+          dotnet restore BibleQuestForKids/BibleQuestForKids.csproj
+      - name: Publish .NET MAUI iOS app
+        script: |
+          set -euo pipefail
+          export PATH="$DOTNET_ROOT:$PATH"
+          dotnet publish BibleQuestForKids/BibleQuestForKids.csproj \
+            -c Release \
+            -f net8.0-ios \
+            -p:RuntimeIdentifier=ios-arm64 \
+            -p:CodesignKey="$CODESIGN_KEY" \
+            -p:CodesignProvision="$PROVISIONING_PROFILE_UUID" \
+            -p:ArchiveOnBuild=true \
+            -p:CreatePackage=true
+      - name: Collect IPA
+        script: |
+          set -euo pipefail
           mkdir -p output
-          cp -r **/bin/Release/net8.0-ios/ios-arm64/*.ipa output/
+          find BibleQuestForKids/bin/Release/net8.0-ios/ios-arm64/publish -maxdepth 1 -name '*.ipa' \
+            -print -exec cp {} output/ \;
     artifacts:
       - output/*.ipa
     publishing:
       app_store_connect:
-        auth: integration
+        auth: api_key
+        key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
+        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
+        private_key: $APP_STORE_CONNECT_PRIVATE_KEY_DECODED
+        app_id: $APP_STORE_CONNECT_APP_ID      # Set this in Codemagic when App Store record exists
         submit_to_testflight: true
+        submit_to_app_store: false
