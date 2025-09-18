@@ -124,5 +124,12 @@ workflows:
       app_store_connect:
         auth: integration
         integration: $APP_STORE_CONNECT_INTEGRATION    # Set to the Codemagic App Store Connect integration name or ID
+# <<<<<<< codex/fix-auth-value-in-codemagic.yaml-gqxpq1
+# =======
+#         key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
+#         issuer_id: $APP_STORE_CONNECT_ISSUER_ID
+#         private_key: $APP_STORE_CONNECT_PRIVATE_KEY_DECODED
+#         app_id: $APP_STORE_CONNECT_APP_ID      # Set this in Codemagic when App Store record exists
+# >>>>>>> main
         submit_to_testflight: true
         submit_to_app_store: false
