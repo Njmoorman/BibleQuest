@@ -21,6 +21,8 @@ workflows:
         TEAM_ID: 2989BXM365
       groups:
         - ios_signing        # CERTIFICATE_*, PROVISIONING_PROFILE, KEYCHAIN_PASSWORD
+    integrations:
+      app_store_connect: CODE MAGIC API - Distribution (Admin)
     triggering:
       events:
         - push
@@ -77,6 +79,6 @@ workflows:
 
     publishing:
       app_store_connect:
-        auth: integration     # Uses Codemagic App Store Connect integration
+        auth: integration
         submit_to_testflight: true
         submit_to_app_store: false
