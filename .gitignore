@@ -1,1 +1,70 @@
+# macOS Finder metadata
 .DS_Store
+
+# Windows Explorer metadata
+Thumbs.db
+ehthumbs.db
+
+# IDE and user-specific settings
+.vs/
+.idea/
+*.user
+*.userosscache
+*.suo
+*.sln.docstates
+
+# Build outputs and generated artifacts for .NET / MAUI
+[Bb]in/
+[Oo]bj/
+**/bin/
+**/obj/
+**/AppPackages/
+**/BundleArtifacts/
+**/CodeAnalysisLogs/
+*.appx
+*.appxbundle
+*.msix
+*.msixbundle
+*.aab
+*.apk
+*.ipa
+
+# NuGet caches
+packages/
+*.nupkg
+project.lock.json
+.nuget/
+
+# Front-end dependencies and build outputs for the React client in wwwroot
+# (keeps Codemagic/TestFlight/App Store packages free from generated assets)
+BibleQuestForKids/wwwroot/node_modules/
+BibleQuestForKids/wwwroot/.pnpm-store/
+BibleQuestForKids/wwwroot/.yarn/
+BibleQuestForKids/wwwroot/.pnp.*
+BibleQuestForKids/wwwroot/dist/
+BibleQuestForKids/wwwroot/build/
+BibleQuestForKids/wwwroot/.vite/
+BibleQuestForKids/wwwroot/.next/
+BibleQuestForKids/wwwroot/.nuxt/
+BibleQuestForKids/wwwroot/.svelte-kit/
+BibleQuestForKids/wwwroot/.astro/
+BibleQuestForKids/wwwroot/out/
+BibleQuestForKids/wwwroot/coverage/
+BibleQuestForKids/wwwroot/.turbo/
+BibleQuestForKids/wwwroot/.parcel-cache/
+BibleQuestForKids/wwwroot/.cache/
+BibleQuestForKids/wwwroot/.eslintcache
+BibleQuestForKids/wwwroot/.stylelintcache
+BibleQuestForKids/wwwroot/.tsbuildinfo
+BibleQuestForKids/wwwroot/.vercel/
+BibleQuestForKids/wwwroot/.expo/
+BibleQuestForKids/wwwroot/.solid/
+BibleQuestForKids/wwwroot/.nx/
+BibleQuestForKids/wwwroot/.tmp/
+BibleQuestForKids/wwwroot/.sass-cache/
+
+# Front-end local environment and log files
+BibleQuestForKids/wwwroot/.env*
+BibleQuestForKids/wwwroot/npm-debug.log*
+BibleQuestForKids/wwwroot/yarn-debug.log*
+BibleQuestForKids/wwwroot/pnpm-debug.log*
