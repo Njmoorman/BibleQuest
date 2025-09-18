@@ -49,6 +49,52 @@ workflows:
           cd BibleQuestForKids/wwwroot
           npm ci
           npm run build
+      - name: Configure iOS code signing keychain
+        script: |
+          # Prepare a temporary keychain and install signing assets provided via Codemagic env vars.
+          # Works for both TestFlight and full App Store submissions when toggled above.
+          set -euo pipefail
+
+          KEYCHAIN_NAME=codemagic-temporary.keychain-db
+          KEYCHAIN_PATH="$HOME/Library/Keychains/$KEYCHAIN_NAME"
+          KEYCHAIN_PASSWORD="$(uuidgen)"
+
+          CERTIFICATE_PATH="$CM_BUILD_DIR/codemagic_cert.p12"
+          PROFILE_PATH="$CM_BUILD_DIR/codemagic_profile.mobileprovision"
+          PROFILE_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
+
+          CERT_PASSWORD="${CERTIFICATE_PRIVATE_KEY_PASSWORD:-}"
+
+          cleanup() {
+            rm -f "$CERTIFICATE_PATH" "$PROFILE_PATH"
+          }
+          trap cleanup EXIT
+
+          echo "$CERTIFICATE_PRIVATE_KEY" | base64 --decode > "$CERTIFICATE_PATH"
+          echo "$PROVISIONING_PROFILE" | base64 --decode > "$PROFILE_PATH"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          EXISTING_KEYCHAINS=$(security list-keychains -d user | sed 's/[" ]//g')
+          security list-keychains -d user -s "$KEYCHAIN_PATH" $EXISTING_KEYCHAINS
+
+          security import "$CERTIFICATE_PATH" -k "$KEYCHAIN_PATH" -P "$CERT_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          mkdir -p "$PROFILE_DIR"
+          PROFILE_UUID=$(/usr/libexec/PlistBuddy -c 'Print UUID' /dev/stdin <<< "$(security cms -D -i "$PROFILE_PATH")")
+          cp "$PROFILE_PATH" "$PROFILE_DIR/$PROFILE_UUID.mobileprovision"
+
+          CODESIGN_IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | head -n 1 | awk '{print $2}')
+
+          {
+            echo "CODESIGN_KEY=$CODESIGN_IDENTITY"
+            echo "PROVISIONING_PROFILE_UUID=$PROFILE_UUID"
+            echo "KEYCHAIN_PATH=$KEYCHAIN_PATH"
+            echo "KEYCHAIN_PASSWORD=$KEYCHAIN_PASSWORD"
+          } >> "$CM_ENV"
       - name: Restore & build MAUI app
         script: |
           dotnet workload install maui
