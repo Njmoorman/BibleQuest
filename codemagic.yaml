@@ -9,18 +9,28 @@
 # ==========================================================
 
 
+# Bible Quest iOS App – Codemagic YAML for .NET MAUI
+# To deploy to App Store later, change `submit_to_testflight` to `submit_to_app_store: true`
 
 workflows:
-  biblequest-release:
-    name: BibleQuest App Store Build
+  bible-quest-ios:
+    name: Bible Quest for Kids – iOS Build (.NET MAUI)
     max_build_duration: 60
     environment:
-      flutter: stable
       xcode: latest
+      cocoapods: default
       vars:
-        BUNDLE_ID: "app.biblequest"
+        DOTNET_ROOT: /usr/local/share/dotnet
+        APP_STORE_CONNECT_ISSUER_ID: <your-issuer-id> # 👈 Already handled in secrets
+        APP_STORE_CONNECT_KEY_IDENTIFIER: 3J6J67QJ9K
+        APP_STORE_CONNECT_PRIVATE_KEY: Encrypted private key in env
+        CERTIFICATE_PRIVATE_KEY: Encrypted .p12 in env
+        PROVISIONING_PROFILE: Encrypted .mobileprovision in env
+        APP_IDENTIFIER: com.base44.biblequest
+        TEAM_ID: 2989BXM365
       groups:
-        - appstore_credentials
+        - app_store_credentials
+        - signing_credentials
       node: 18.16.0
     triggering:
       events:
@@ -29,32 +39,23 @@ workflows:
         - pattern: main
           include: true
     scripts:
-      - name: Install dependencies
+      - name: Install .NET SDK
         script: |
-          brew install jq
+          brew install --cask dotnet-sdk
+          export PATH="/usr/local/share/dotnet:$PATH"
+          dotnet --version
+      - name: Restore & build MAUI app
+        script: |
           dotnet workload install maui
-      - name: Restore and build
-        script: |
           dotnet restore
-          dotnet build BibleQuest.sln -c Release -f net8.0-ios
-      - name: Publish .ipa
+          dotnet build BibleQuest.sln -c Release -f:net8.0-ios /p:Platform=iPhone /p:BuildIpa=true
+      - name: Package IPA
         script: |
-          dotnet publish BibleQuest.sln \
-            -c Release \
-            -f net8.0-ios \
-            -p:ApplicationTitle="BibleQuest" \
-            -p:RuntimeIdentifier=ios-arm64 \
-            -p:CodesignKey=$CERTIFICATE_PRIVATE_KEY \
-            -p:CodesignProvision=$PROVISIONING_PROFILE \
-            -p:CodesignKeyPassword=$CERTIFICATE_PASSWORD \
-            -p:EnableCodeSigning=true \
-            -p:GenerateAppBundle=true
+          mkdir -p output
+          cp -r **/bin/Release/net8.0-ios/ios-arm64/*.ipa output/
     artifacts:
-      - build/**/Release/**/BibleQuest.ipa
+      - output/*.ipa
     publishing:
       app_store_connect:
-        api_key: $APP_STORE_CONNECT_KEY
-        key_id: $APP_STORE_CONNECT_KEY_ID
-        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
+        auth: integration
         submit_to_testflight: true
-        submit_to_app_store: false
