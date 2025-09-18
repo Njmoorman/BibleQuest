@@ -52,8 +52,8 @@ workflows:
       - name: Restore & build MAUI app
         script: |
           dotnet workload install maui
-          dotnet restore
-          dotnet build BibleQuest.sln -c Release -f:net8.0-ios /p:Platform=iPhone /p:BuildIpa=true
+          dotnet restore BibleQuestForKids/BibleQuestForKids.csproj
+          dotnet build BibleQuestForKids/BibleQuestForKids.csproj -c Release -f net8.0-ios -p:RuntimeIdentifier=ios-arm64 -p:BuildIpa=true
       - name: Package IPA
         script: |
           mkdir -p output
