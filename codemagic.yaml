@@ -44,6 +44,11 @@ workflows:
           brew install --cask dotnet-sdk
           export PATH="/usr/local/share/dotnet:$PATH"
           dotnet --version
+      - name: Build bundled web assets (npm)
+        script: |
+          cd BibleQuestForKids/wwwroot
+          npm ci
+          npm run build
       - name: Restore & build MAUI app
         script: |
           dotnet workload install maui
