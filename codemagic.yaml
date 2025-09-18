@@ -38,14 +38,18 @@ workflows:
       branch_patterns:
         - pattern: main
           include: true
+    cache:
+      cache_paths:
+        - BibleQuestForKids/wwwroot/node_modules # Speeds up npm installs between builds
     scripts:
       - name: Install .NET SDK
         script: |
           brew install --cask dotnet-sdk
           export PATH="/usr/local/share/dotnet:$PATH"
           dotnet --version
-      - name: Build bundled web assets (npm)
+      - name: Install web deps and build static bundle (npm)
         script: |
+          # Ensure the React-based wwwroot assets are rebuilt before MAUI restore/build
           cd BibleQuestForKids/wwwroot
           npm ci
           npm run build
