@@ -1,25 +1,60 @@
+# ==========================================================
+# Bible Quest iOS Build — Codemagic Workflow
+#
+# CURRENT MODE: TestFlight Deployment (internal/external testers)
+# TO DEPLOY TO APP STORE:
+#    1. Set `submit_to_testflight: false`
+#    2. Set `submit_to_app_store: true`
+#    3. Confirm app metadata and screenshots in App Store Connect
+# ==========================================================
+
+
+
 workflows:
-  maui-ios-build:
-    name: Build iOS .NET MAUI App
+  biblequest-release:
+    name: BibleQuest App Store Build
     max_build_duration: 60
     environment:
-      vars:
-        DOTNET_VERSION: "8.0.x"
+      flutter: stable
       xcode: latest
+      vars:
+        BUNDLE_ID: "app.biblequest"
+      groups:
+        - appstore_credentials
+      node: 18.16.0
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: main
+          include: true
     scripts:
-      - name: Install .NET SDK
+      - name: Install dependencies
         script: |
-          export DOTNET_ROOT=$HOME/dotnet
-          export PATH=$DOTNET_ROOT:$PATH
-          curl -sSL https://dot.net/v1/dotnet-install.sh | bash /dev/stdin --channel $DOTNET_VERSION
-      - name: Restore dependencies
-        script: dotnet restore
-      - name: Build for iOS
+          brew install jq
+          dotnet workload install maui
+      - name: Restore and build
         script: |
-          dotnet build YourAppName.sln -c Release -f:net8.0-ios /p:Platform=iPhone
+          dotnet restore
+          dotnet build BibleQuest.sln -c Release -f net8.0-ios
+      - name: Publish .ipa
+        script: |
+          dotnet publish BibleQuest.sln \
+            -c Release \
+            -f net8.0-ios \
+            -p:ApplicationTitle="BibleQuest" \
+            -p:RuntimeIdentifier=ios-arm64 \
+            -p:CodesignKey=$CERTIFICATE_PRIVATE_KEY \
+            -p:CodesignProvision=$PROVISIONING_PROFILE \
+            -p:CodesignKeyPassword=$CERTIFICATE_PASSWORD \
+            -p:EnableCodeSigning=true \
+            -p:GenerateAppBundle=true
     artifacts:
-      - build/ios/**/*.ipa
+      - build/**/Release/**/BibleQuest.ipa
     publishing:
-      email:
-        recipients:
-          - jordy.moorman@gmail.com
+      app_store_connect:
+        api_key: $APP_STORE_CONNECT_KEY
+        key_id: $APP_STORE_CONNECT_KEY_ID
+        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
+        submit_to_testflight: true
+        submit_to_app_store: false
