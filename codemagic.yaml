@@ -33,63 +33,74 @@ workflows:
         script: |
           set -euo pipefail
           brew install --cask dotnet-sdk
-          export PATH="$DOTNET_ROOT:$PATH"
-          dotnet --info
-      - name: Install MAUI workload
-        script: |
-          set -euo pipefail
-          export PATH="$DOTNET_ROOT:$PATH"
-          dotnet workload install maui --skip-manifest-update
-      - name: Install signing assets
-        script: |
-          set -euo pipefail
+# <<<<<<< codex/add-build-step-for-dist-assets-f3c2ca
+#           export PATH="$DOTNET_ROOT:$PATH"
+#           dotnet --info
+#       - name: Install MAUI workload
+#         script: |
+#           set -euo pipefail
+#           export PATH="$DOTNET_ROOT:$PATH"
+#           dotnet workload install maui --skip-manifest-update
+#       - name: Install signing assets
+#         script: |
+#           set -euo pipefail
 
-          KEYCHAIN="$HOME/Library/Keychains/codemagic.keychain-db"
-          KEYCHAIN_PASSWORD=${KEYCHAIN_PASSWORD:-"codemagic"}
-          CERT_P12="$HOME/certificate.p12"
-          PROFILE_PATH="$HOME/profile.mobileprovision"
+#           KEYCHAIN="$HOME/Library/Keychains/codemagic.keychain-db"
+#           KEYCHAIN_PASSWORD=${KEYCHAIN_PASSWORD:-"codemagic"}
+#           CERT_P12="$HOME/certificate.p12"
+#           PROFILE_PATH="$HOME/profile.mobileprovision"
 
-          echo "$CERTIFICATE_PRIVATE_KEY" | base64 --decode > "$CERT_P12"
+#           echo "$CERTIFICATE_PRIVATE_KEY" | base64 --decode > "$CERT_P12"
 
-          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
-          security set-keychain-settings -lut 21600 "$KEYCHAIN"
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
-          security import "$CERT_P12" -k "$KEYCHAIN" -P "$CERTIFICATE_PASSWORD" -T /usr/bin/codesign
-          security list-keychains -d user -s "$KEYCHAIN" "$HOME/Library/Keychains/login.keychain-db"
-          security default-keychain -d user -s "$KEYCHAIN"
+#           security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+#           security set-keychain-settings -lut 21600 "$KEYCHAIN"
+#           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+#           security import "$CERT_P12" -k "$KEYCHAIN" -P "$CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+#           security list-keychains -d user -s "$KEYCHAIN" "$HOME/Library/Keychains/login.keychain-db"
+#           security default-keychain -d user -s "$KEYCHAIN"
 
-          echo "$PROVISIONING_PROFILE" | base64 --decode > "$PROFILE_PATH"
-          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
-          PROFILE_UUID=$(/usr/libexec/PlistBuddy -c 'Print UUID' /dev/stdin <<< "$(security cms -D -i \"$PROFILE_PATH\")")
-          cp "$PROFILE_PATH" "$HOME/Library/MobileDevice/Provisioning Profiles/$PROFILE_UUID.mobileprovision"
+#           echo "$PROVISIONING_PROFILE" | base64 --decode > "$PROFILE_PATH"
+#           mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+#           PROFILE_UUID=$(/usr/libexec/PlistBuddy -c 'Print UUID' /dev/stdin <<< "$(security cms -D -i \"$PROFILE_PATH\")")
+#           cp "$PROFILE_PATH" "$HOME/Library/MobileDevice/Provisioning Profiles/$PROFILE_UUID.mobileprovision"
 
-          CODESIGN_KEY=$(security find-identity -v -p codesigning "$KEYCHAIN" | head -n 1 | awk -F '"' '{print $2}')
-          if [ -z "$CODESIGN_KEY" ]; then
-            echo "No signing identity found in imported certificate." >&2
-            exit 1
-          fi
+#           CODESIGN_KEY=$(security find-identity -v -p codesigning "$KEYCHAIN" | head -n 1 | awk -F '"' '{print $2}')
+#           if [ -z "$CODESIGN_KEY" ]; then
+#             echo "No signing identity found in imported certificate." >&2
+#             exit 1
+#           fi
 
-          {
-            echo "CODESIGN_KEY=$CODESIGN_KEY"
-            echo "PROVISIONING_PROFILE_UUID=$PROFILE_UUID"
-            echo "APP_STORE_CONNECT_PRIVATE_KEY_DECODED<<'EOF'"
-            echo "$APP_STORE_CONNECT_PRIVATE_KEY" | base64 --decode
-            echo "EOF"
-          } >> "$CM_ENV"
+#           {
+#             echo "CODESIGN_KEY=$CODESIGN_KEY"
+#             echo "PROVISIONING_PROFILE_UUID=$PROFILE_UUID"
+#             echo "APP_STORE_CONNECT_PRIVATE_KEY_DECODED<<'EOF'"
+#             echo "$APP_STORE_CONNECT_PRIVATE_KEY" | base64 --decode
+#             echo "EOF"
+#           } >> "$CM_ENV"
 
-          rm -f "$CERT_P12" "$PROFILE_PATH"
-      - name: Build bundled web assets (npm)
-        script: |
-          set -euo pipefail
-          cd BibleQuestForKids/wwwroot
-          npm ci
-          npm run build
-      - name: Restore NuGet packages
-        script: |
-          set -euo pipefail
-          export PATH="$DOTNET_ROOT:$PATH"
-          dotnet restore BibleQuestForKids/BibleQuestForKids.csproj
-      - name: Publish .NET MAUI iOS app
+#           rm -f "$CERT_P12" "$PROFILE_PATH"
+#       - name: Build bundled web assets (npm)
+#         script: |
+#           set -euo pipefail
+#           cd BibleQuestForKids/wwwroot
+#           npm ci
+#           npm run build
+#       - name: Restore NuGet packages
+#         script: |
+#           set -euo pipefail
+#           export PATH="$DOTNET_ROOT:$PATH"
+#           dotnet restore BibleQuestForKids/BibleQuestForKids.csproj
+#       - name: Publish .NET MAUI iOS app
+# =======
+#           export PATH="/usr/local/share/dotnet:$PATH"
+#           dotnet --version
+#       - name: Build bundled web assets (npm)
+#         script: |
+#           cd BibleQuestForKids/wwwroot
+#           npm ci
+#           npm run build
+#       - name: Restore & build MAUI app
+# >>>>>>> main
         script: |
           set -euo pipefail
           export PATH="$DOTNET_ROOT:$PATH"
