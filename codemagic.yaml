@@ -122,10 +122,8 @@ workflows:
       - output/*.ipa
     publishing:
       app_store_connect:
-        auth: api_key
-        key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
-        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
-        private_key: $APP_STORE_CONNECT_PRIVATE_KEY_DECODED
-        app_id: $APP_STORE_CONNECT_APP_ID      # Set this in Codemagic when App Store record exists
+        auth: integration
+        # Codemagic uses the App Store Connect integration selected in the UI for this app.
+        # No API key or private key fields are allowed when auth is "integration".
         submit_to_testflight: true
         submit_to_app_store: false
