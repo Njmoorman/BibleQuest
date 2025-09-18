@@ -3,5 +3,5 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              x:Class="BibleQuestForKids.MainPage">
 
-    <WebView x:Name="Browser" Source="index.html" />
+    <WebView x:Name="Browser" />
 </ContentPage>

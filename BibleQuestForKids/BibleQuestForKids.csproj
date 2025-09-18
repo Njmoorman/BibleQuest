@@ -15,7 +15,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <MauiAsset Include="wwwroot\\**\\*" />
+    <MauiAsset Include="wwwroot\\dist\\**">
+      <LogicalName>wwwroot/dist/%(RecursiveDir)%(Filename)%(Extension)</LogicalName>
+    </MauiAsset>
   </ItemGroup>
 
   <ItemGroup>
