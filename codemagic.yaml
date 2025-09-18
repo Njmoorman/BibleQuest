@@ -17,19 +17,17 @@ workflows:
       node: 18.16.0
       vars:
         DOTNET_ROOT: /usr/local/share/dotnet
-        APP_IDENTIFIER: com.base44.biblequest
+        APP_IDENTIFIER: app.biblequest
         TEAM_ID: 2989BXM365
       groups:
-        - app_store_connect       # Secrets: APP_STORE_CONNECT_KEY_ID, ISSUER_ID, KEY
-        - ios_signing             # Secrets: CERTIFICATE_PRIVATE_KEY, PROVISIONING_PROFILE, CERTIFICATE_PASSWORD, KEYCHAIN_PASSWORD
-
+        - app_store_connect       # Includes APP_STORE_CONNECT_* secrets
+        - ios_signing             # Includes CERTIFICATE_*, PROVISIONING_PROFILE, KEYCHAIN_PASSWORD
     triggering:
       events:
         - push
       branch_patterns:
         - pattern: main
           include: true
-
     scripts:
       - name: Install .NET SDK
         script: |
@@ -47,7 +45,6 @@ workflows:
       - name: Install signing assets
         script: |
           set -euo pipefail
-
           KEYCHAIN="$HOME/Library/Keychains/codemagic.keychain-db"
           KEYCHAIN_PASSWORD=${KEYCHAIN_PASSWORD:-"codemagic"}
           CERT_P12="$HOME/certificate.p12"
@@ -76,9 +73,6 @@ workflows:
           {
             echo "CODESIGN_KEY=$CODESIGN_KEY"
             echo "PROVISIONING_PROFILE_UUID=$PROFILE_UUID"
-            echo "APP_STORE_CONNECT_PRIVATE_KEY_DECODED<<'EOF'"
-            echo "$APP_STORE_CONNECT_KEY" | base64 --decode
-            echo "EOF"
           } >> "$CM_ENV"
 
           rm -f "$CERT_P12" "$PROFILE_PATH"
@@ -122,6 +116,5 @@ workflows:
     publishing:
       app_store_connect:
         auth: integration
-        integration: biblequest_appstore         # <- Use exact name from your Codemagic integration UI
         submit_to_testflight: true
         submit_to_app_store: false
