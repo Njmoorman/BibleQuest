@@ -1,1 +1,23 @@
+# macOS Finder metadata
 .DS_Store
+
+# Front-end dependencies and build outputs for the React client in wwwroot
+# (keeps Codemagic/TestFlight/App Store packages free from generated assets)
+BibleQuestForKids/wwwroot/node_modules/
+BibleQuestForKids/wwwroot/.pnpm-store/
+BibleQuestForKids/wwwroot/.yarn/
+BibleQuestForKids/wwwroot/dist/
+BibleQuestForKids/wwwroot/build/
+BibleQuestForKids/wwwroot/.vite/
+BibleQuestForKids/wwwroot/.next/
+BibleQuestForKids/wwwroot/out/
+BibleQuestForKids/wwwroot/coverage/
+BibleQuestForKids/wwwroot/.turbo/
+BibleQuestForKids/wwwroot/.parcel-cache/
+BibleQuestForKids/wwwroot/.cache/
+
+# Front-end local environment and log files
+BibleQuestForKids/wwwroot/.env*
+BibleQuestForKids/wwwroot/npm-debug.log*
+BibleQuestForKids/wwwroot/yarn-debug.log*
+BibleQuestForKids/wwwroot/pnpm-debug.log*
