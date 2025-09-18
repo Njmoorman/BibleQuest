@@ -20,9 +20,7 @@ workflows:
         APP_IDENTIFIER: app.biblequest
         TEAM_ID: 2989BXM365
       groups:
-        - ios_signing        # CERTIFICATE_*, PROVISIONING_PROFILE, KEYCHAIN_PASSWORD
-    integrations:
-      app_store_connect: CODE MAGIC API - Distribution (Admin)
+        - app_store_connect       # This group is created automatically by Codemagic when you integrate ASC
     triggering:
       events:
         - push
@@ -36,26 +34,17 @@ workflows:
           brew install --cask dotnet-sdk
           export PATH="$DOTNET_ROOT:$PATH"
           dotnet --info
-
-      - name: Install MAUI workload
-        script: |
-          set -euo pipefail
-          export PATH="$DOTNET_ROOT:$PATH"
-          dotnet workload install maui --skip-manifest-update
-
       - name: Build bundled web assets (npm)
         script: |
           set -euo pipefail
           cd BibleQuestForKids/wwwroot
           npm ci
           npm run build
-
       - name: Restore NuGet packages
         script: |
           set -euo pipefail
           export PATH="$DOTNET_ROOT:$PATH"
           dotnet restore BibleQuestForKids/BibleQuestForKids.csproj
-
       - name: Publish .NET MAUI iOS app
         script: |
           set -euo pipefail
@@ -66,17 +55,14 @@ workflows:
             -p:RuntimeIdentifier=ios-arm64 \
             -p:ArchiveOnBuild=true \
             -p:CreatePackage=true
-
       - name: Collect IPA
         script: |
           set -euo pipefail
           mkdir -p output
           find BibleQuestForKids/bin/Release/net8.0-ios/ios-arm64/publish -maxdepth 1 -name '*.ipa' \
             -print -exec cp {} output/ \;
-
     artifacts:
       - output/*.ipa
-
     publishing:
       app_store_connect:
         auth: integration
