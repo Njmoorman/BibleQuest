@@ -16,7 +16,10 @@ workflows:
       cocoapods: default
       node: 18.16.0
       vars:
-        DOTNET_ROOT: /usr/local/share/dotnet
+        DOTNET_ROOT: /Users/builder/.dotnet
+        DOTNET_CLI_HOME: /Users/builder/.dotnet
+        DOTNET_SKIP_FIRST_TIME_EXPERIENCE: "1"
+        DOTNET_CLI_TELEMETRY_OPTOUT: "1"
         APP_IDENTIFIER: app.biblequest
         TEAM_ID: 2989BXM365
     integrations:
@@ -28,10 +31,14 @@ workflows:
         - pattern: main
           include: true
     scripts:
-      - name: Install .NET SDK
+      - name: Install .NET SDK locally (no sudo required)
         script: |
           set -euo pipefail
-          brew install --cask dotnet-sdk
+          DOTNET_VERSION="8.0.301"
+          mkdir -p "$DOTNET_ROOT"
+          curl -sSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh
+          chmod +x /tmp/dotnet-install.sh
+          /tmp/dotnet-install.sh --version "$DOTNET_VERSION" --install-dir "$DOTNET_ROOT"
           export PATH="$DOTNET_ROOT:$PATH"
           dotnet --info
 
