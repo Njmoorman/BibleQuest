@@ -15,6 +15,8 @@ workflows:
       xcode: latest
       cocoapods: default
       node: 18.16.0
+      groups:
+        - appstore_credentials  # 👈 keep signing assets + ASC API key in this Codemagic group
       vars:
         DOTNET_ROOT: /Users/builder/.dotnet
         DOTNET_CLI_HOME: /Users/builder/.dotnet
@@ -85,9 +87,9 @@ workflows:
           # Certificate (.p12), its password, and the provisioning profile must be
           # uploaded to Codemagic as base64 strings. Accepted variable names are,
           # in priority order, the ones listed in each call below.
-          CERTIFICATE_VAR=$(pick_env_name IOS_CERTIFICATE_P12 CM_CERTIFICATE_P12 IOS_DISTRIBUTION_CERTIFICATE)
-          PASSWORD_VAR=$(pick_env_name IOS_CERTIFICATE_PASSWORD CM_CERTIFICATE_PASSWORD IOS_DISTRIBUTION_CERTIFICATE_PASSWORD)
-          PROFILE_VAR=$(pick_env_name IOS_PROVISIONING_PROFILE CM_PROVISIONING_PROFILE IOS_DISTRIBUTION_PROFILE)
+          CERTIFICATE_VAR=$(pick_env_name IOS_CERTIFICATE_P12 CM_CERTIFICATE_P12 IOS_DISTRIBUTION_CERTIFICATE APPLE_CERTIFICATE_P12 APPLE_DISTRIBUTION_CERTIFICATE CERTIFICATE_PRIVATE_KEY)
+          PASSWORD_VAR=$(pick_env_name IOS_CERTIFICATE_PASSWORD CM_CERTIFICATE_PASSWORD IOS_DISTRIBUTION_CERTIFICATE_PASSWORD APPLE_CERTIFICATE_PASSWORD APPLE_DISTRIBUTION_CERTIFICATE_PASSWORD CERTIFICATE_PASSWORD)
+          PROFILE_VAR=$(pick_env_name IOS_PROVISIONING_PROFILE CM_PROVISIONING_PROFILE IOS_DISTRIBUTION_PROFILE APPLE_PROVISIONING_PROFILE IOS_PROVISIONING_PROFILE_BASE64 PROVISIONING_PROFILE)
 
           # Generate a temporary keychain password for this build so we don't need
           # to store one in Codemagic.
