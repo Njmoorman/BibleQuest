@@ -137,14 +137,27 @@ workflows:
           echo "Using signing identity: $IOS_IDENTITY"
 
           # Share values with later scripts in this workflow
-          echo "export SIGNING_KEYCHAIN_PATH=$KEYCHAIN_PATH" >> "$CM_ENV"
-          echo "export PROVISIONING_PROFILE_UUID=$PROFILE_UUID" >> "$CM_ENV"
-          echo "export IOS_CODESIGN_IDENTITY=$IOS_IDENTITY" >> "$CM_ENV"
-          echo "export KEYCHAIN_PASSWORD=$KEYCHAIN_PASSWORD" >> "$CM_ENV"  # helpful for debugging follow-up steps
+          # Export for this script and persist for later workflow steps
+          export SIGNING_KEYCHAIN_PATH="$KEYCHAIN_PATH"
+          export PROVISIONING_PROFILE_UUID="$PROFILE_UUID"
+          export IOS_CODESIGN_IDENTITY="$IOS_IDENTITY"
+          export KEYCHAIN_PASSWORD="$KEYCHAIN_PASSWORD"
+
+          printf 'export SIGNING_KEYCHAIN_PATH=%q\n' "$SIGNING_KEYCHAIN_PATH" >> "$CM_ENV"
+          printf 'export PROVISIONING_PROFILE_UUID=%q\n' "$PROVISIONING_PROFILE_UUID" >> "$CM_ENV"
+          printf 'export IOS_CODESIGN_IDENTITY=%q\n' "$IOS_CODESIGN_IDENTITY" >> "$CM_ENV"
+          printf 'export KEYCHAIN_PASSWORD=%q\n' "$KEYCHAIN_PASSWORD" >> "$CM_ENV"  # helpful for debugging follow-up steps
 
       - name: Publish .NET MAUI iOS app
         script: |
           set -euo pipefail
+          if [ -f "${CM_ENV-}" ]; then
+            # shellcheck source=/dev/null
+            . "$CM_ENV"
+          fi
+          : "${IOS_CODESIGN_IDENTITY:?Missing IOS_CODESIGN_IDENTITY from signing step}"
+          : "${PROVISIONING_PROFILE_UUID:?Missing PROVISIONING_PROFILE_UUID from signing step}"
+          : "${SIGNING_KEYCHAIN_PATH:?Missing SIGNING_KEYCHAIN_PATH from signing step}"
           export PATH="$DOTNET_ROOT:$PATH"
           dotnet publish BibleQuestForKids/BibleQuestForKids.csproj \
             -c Release \
