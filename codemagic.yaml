@@ -63,6 +63,62 @@ workflows:
           export PATH="$DOTNET_ROOT:$PATH"
           dotnet restore BibleQuestForKids/BibleQuestForKids.csproj
 
+      - name: Configure Apple signing assets
+        script: |
+          set -euo pipefail
+          # The following environment variables must be defined in Codemagic as secure
+          # (base64-encoded) values:
+          #   IOS_CERTIFICATE_P12        → distribution certificate (.p12) in base64
+          #   IOS_CERTIFICATE_PASSWORD   → password for the .p12 file
+          #   IOS_PROVISIONING_PROFILE   → provisioning profile (.mobileprovision) in base64
+          #   KEYCHAIN_PASSWORD          → temporary password used for the build keychain
+          : "${IOS_CERTIFICATE_P12:?Missing IOS_CERTIFICATE_P12}"
+          : "${IOS_CERTIFICATE_PASSWORD:?Missing IOS_CERTIFICATE_PASSWORD}"
+          : "${IOS_PROVISIONING_PROFILE:?Missing IOS_PROVISIONING_PROFILE}"
+          : "${KEYCHAIN_PASSWORD:?Missing KEYCHAIN_PASSWORD}"
+
+          SIGNING_DIR="$HOME/codemagic-signing"
+          KEYCHAIN_PATH="$HOME/Library/Keychains/codemagic-signing.keychain-db"
+          CERT_PATH="$SIGNING_DIR/apple_distribution.p12"
+          PROFILE_TMP="$SIGNING_DIR/profile.mobileprovision"
+          PROFILES_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
+
+          mkdir -p "$SIGNING_DIR" "$PROFILES_DIR"
+
+          # Decode assets from Codemagic secure environment variables
+          echo "$IOS_CERTIFICATE_P12" | base64 --decode > "$CERT_PATH"
+          echo "$IOS_PROVISIONING_PROFILE" | base64 --decode > "$PROFILE_TMP"
+
+          # Prepare a dedicated, unlocked keychain for the build
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH"
+          security default-keychain -d user -s "$KEYCHAIN_PATH"
+
+          security import "$CERT_PATH" -k "$KEYCHAIN_PATH" -P "$IOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          # Install provisioning profile and capture its UUID for signing
+          PROFILE_PLIST=$(security cms -D -i "$PROFILE_TMP")
+          PROFILE_UUID=$(/usr/libexec/PlistBuddy -c 'Print UUID' /dev/stdin <<< "$PROFILE_PLIST")
+          PROFILE_NAME=$(/usr/libexec/PlistBuddy -c 'Print Name' /dev/stdin <<< "$PROFILE_PLIST")
+          mv "$PROFILE_TMP" "$PROFILES_DIR/$PROFILE_UUID.mobileprovision"
+          echo "Installed provisioning profile '$PROFILE_NAME' ($PROFILE_UUID)"
+
+          # Detect the imported signing identity so we can feed it to dotnet publish
+          IOS_IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | awk -F '"' 'NR==1 {print $2}')
+          if [ -z "$IOS_IDENTITY" ]; then
+            echo "No signing identity available" >&2
+            exit 1
+          fi
+          echo "Using signing identity: $IOS_IDENTITY"
+
+          # Share values with later scripts in this workflow
+          echo "export SIGNING_KEYCHAIN_PATH=$KEYCHAIN_PATH" >> "$CM_ENV"
+          echo "export PROVISIONING_PROFILE_UUID=$PROFILE_UUID" >> "$CM_ENV"
+          echo "export IOS_CODESIGN_IDENTITY=$IOS_IDENTITY" >> "$CM_ENV"
+
       - name: Publish .NET MAUI iOS app
         script: |
           set -euo pipefail
@@ -72,7 +128,10 @@ workflows:
             -f net8.0-ios \
             -p:RuntimeIdentifier=ios-arm64 \
             -p:ArchiveOnBuild=true \
-            -p:CreatePackage=true
+            -p:CreatePackage=true \
+            -p:CodesignKey="$IOS_CODESIGN_IDENTITY" \
+            -p:CodesignProvision="$PROVISIONING_PROFILE_UUID" \
+            -p:CodesignKeychain="$SIGNING_KEYCHAIN_PATH"
 
       - name: Collect IPA
         script: |
