@@ -19,8 +19,8 @@ workflows:
         DOTNET_ROOT: /usr/local/share/dotnet
         APP_IDENTIFIER: app.biblequest
         TEAM_ID: 2989BXM365
-      groups:
-        - app_store_connect       # This group is created automatically by Codemagic when you integrate ASC
+    integrations:
+      app_store_connect: CODE MAGIC API - Distribution (Admin)  # 👈 must match your integration name exactly
     triggering:
       events:
         - push
