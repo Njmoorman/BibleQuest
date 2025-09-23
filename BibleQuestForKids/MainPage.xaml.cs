@@ -1,6 +1,11 @@
 using Microsoft.Maui.Controls;
+using Microsoft.Maui.Storage;
 using System;
 using System.IO;
+
+#if IOS || MACCATALYST
+using Foundation;
+#endif
 
 namespace BibleQuestForKids;
 
@@ -36,7 +41,7 @@ public partial class MainPage : ContentPage
 
         if (!File.Exists(indexPath))
         {
-            var packageDist = Path.Combine(FileSystem.AppPackageDirectory, "wwwroot", buildFolderName);
+            var packageDist = Path.Combine(GetPackageAssetRoot(), buildFolderName);
             CopyDirectory(packageDist, targetDist);
         }
 
@@ -46,6 +51,17 @@ public partial class MainPage : ContentPage
         }
 
         return indexPath;
+    }
+
+    private static string GetPackageAssetRoot()
+    {
+#if IOS || MACCATALYST
+        // NSBundle ensures we resolve the on-device app bundle regardless of TestFlight/App Store packaging.
+        return Path.Combine(NSBundle.MainBundle.BundlePath, "wwwroot");
+#else
+        // For Android (and other targets) rely on MAUI's abstraction when available.
+        return Path.Combine(FileSystem.AppPackageDirectory, "wwwroot");
+#endif
     }
 
     private static void CopyDirectory(string sourceDir, string destinationDir)
