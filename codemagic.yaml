@@ -201,85 +201,9 @@ workflows:
             echo "Missing $ICONSET" >&2
             exit 1
           fi
-          python3 - <<'PY'
-import json, plistlib, struct, sys
-from pathlib import Path
-
-iconset = Path("BibleQuestForKids/Platforms/iOS/Assets.xcassets/AppIcon.appiconset")
-contents_path = iconset / "Contents.json"
-if not contents_path.exists():
-    sys.exit(f"Missing {contents_path}")
-data = json.loads(contents_path.read_text())
-filenames = {img.get("filename") for img in data.get("images", []) if img.get("filename")}
-required = {"Icon-40@3x.png", "Icon-60@2x.png", "Icon-1024.png"}
-missing = sorted(required - filenames)
-if missing:
-    sys.exit("Missing required icon files: " + ", ".join(missing))
-
-base64_sources = {
-    f"{name.rsplit('.', 1)[0]}.base64"
-    for name in filenames
-}
-missing_base64 = sorted(source for source in base64_sources if not (iconset / source).exists())
-if missing_base64:
-    sys.exit("Missing base64 icon sources: " + ", ".join(missing_base64))
-
-def png_size(path):
-    with path.open("rb") as png:
-        if png.read(8) != b"\x89PNG\r\n\x1a\n":
-            sys.exit(f"{path.name} is not a valid PNG signature")
-        length = struct.unpack(">I", png.read(4))[0]
-        chunk_type = png.read(4)
-        if chunk_type != b"IHDR":
-            sys.exit(f"{path.name} missing IHDR header")
-        width, height = struct.unpack(">II", png.read(8))
-        remaining = length - 8
-        if remaining > 0:
-            png.seek(remaining, 1)
-        return width, height
-
-expected_dimensions = {
-    "Icon-40@3x.png": (120, 120),
-    "Icon-60@2x.png": (120, 120),
-    "Icon-1024.png": (1024, 1024),
-}
-for filename, (expected_w, expected_h) in expected_dimensions.items():
-    image_path = iconset / filename
-    if not image_path.exists():
-        sys.exit(f"{filename} missing from disk even though Contents.json references it")
-    width, height = png_size(image_path)
-    if (width, height) != (expected_w, expected_h):
-        sys.exit(f"{filename} should be {expected_w}x{expected_h}, found {width}x{height}")
-
-info_path = Path("BibleQuestForKids/Platforms/iOS/Info.plist")
-with info_path.open("rb") as plist_file:
-    plist = plistlib.load(plist_file)
-
-def extract_icon_name(root_key):
-    value = plist.get(root_key)
-    if isinstance(value, dict):
-        primary = value.get("CFBundlePrimaryIcon")
-        if isinstance(primary, dict):
-            return primary.get("CFBundleIconName")
-    return None
-
-icon_name = plist.get("CFBundleIconName")
-if icon_name != "AppIcon":
-    sys.exit(f"CFBundleIconName should be 'AppIcon', found {icon_name!r}")
-
-for scope in ("CFBundleIcons", "CFBundleIcons~ipad"):
-    scoped_name = extract_icon_name(scope)
-    if scoped_name != "AppIcon":
-        sys.exit(f"{scope}/CFBundlePrimaryIcon/CFBundleIconName should be 'AppIcon', found {scoped_name!r}")
-
-xs_assets = plist.get("XSAppIconAssets")
-expected_asset_path = "Assets.xcassets/AppIcon.appiconset"
-if xs_assets != expected_asset_path:
-    sys.exit(f"XSAppIconAssets should be '{expected_asset_path}', found {xs_assets!r}")
-
-print("iOS icon catalog validated.")
-PY
-
+          # Keep validation logic in a standalone script so Base44/Codemagic runs stay readable.
+          python3 "$ICONSET/validate_icons.py" "$ICONSET"
+          
       - name: Publish .NET MAUI iOS app
         script: |
           set -euo pipefail
