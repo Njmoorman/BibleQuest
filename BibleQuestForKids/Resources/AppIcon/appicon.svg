@@ -6,5 +6,6 @@
       <stop offset="100%" stop-color="#274B8A" />
     </linearGradient>
   </defs>
-  <rect width="1024" height="1024" rx="220" fill="url(#bg)" />
+  <!-- Keep the background square so iOS marketing icons avoid transparent corners -->
+  <rect width="1024" height="1024" fill="url(#bg)" />
 </svg>
