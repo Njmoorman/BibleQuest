@@ -161,6 +161,81 @@ workflows:
             echo "CFBundleIdentifier already matches $APP_IDENTIFIER"
           fi
 
+      - name: Stamp Info.plist version numbers
+        script: |
+          set -euo pipefail
+          INFO_PLIST="BibleQuestForKids/Platforms/iOS/Info.plist"
+
+          # Accept version inputs from your Codemagic environment (APP_VERSION or APP_DISPLAY_VERSION),
+          # fall back to tag names like "v1.2.3", or use a safe default for local runs.
+          pick_display_version() {
+            if [ -n "${APP_VERSION-}" ]; then
+              printf '%s' "$APP_VERSION"
+              return
+            fi
+            if [ -n "${APP_DISPLAY_VERSION-}" ]; then
+              printf '%s' "$APP_DISPLAY_VERSION"
+              return
+            fi
+            if [ -n "${CM_TAG-}" ]; then
+              printf '%s' "${CM_TAG#v}"
+              return
+            fi
+            printf '1.0.0'
+          }
+
+          pick_build_number() {
+            if [ -n "${APP_BUILD_NUMBER-}" ]; then
+              printf '%s' "$APP_BUILD_NUMBER"
+              return
+            fi
+            if [ -n "${BUILD_NUMBER-}" ]; then
+              printf '%s' "$BUILD_NUMBER"
+              return
+            fi
+            if [ -n "${CM_BUILD_ID-}" ]; then
+              printf '%s' "$CM_BUILD_ID"
+              return
+            fi
+            printf '1'
+          }
+
+          DISPLAY_VERSION_RAW=$(pick_display_version)
+          BUILD_NUMBER_RAW=$(pick_build_number)
+
+          # Apple requires one to three dot-separated integers. Strip any stray characters and validate.
+          sanitize_version() {
+            local value
+            value=$(printf '%s' "$1" | tr -cd '0-9.')
+            if [ -z "$value" ] || ! printf '%s' "$value" | grep -Eq '^[0-9]+(\.[0-9]+){0,2}$'; then
+              echo "Invalid version format '$1'. Provide APP_VERSION like 1.2.3" >&2
+              exit 1
+            fi
+            printf '%s' "$value"
+          }
+
+          sanitize_build() {
+            local value
+            value=$(printf '%s' "$1" | tr -cd '0-9.')
+            if [ -z "$value" ] || ! printf '%s' "$value" | grep -Eq '^[0-9]+(\.[0-9]+){0,2}$'; then
+              echo "Invalid build number '$1'. Provide APP_BUILD_NUMBER like 42" >&2
+              exit 1
+            fi
+            printf '%s' "$value"
+          }
+
+          APP_DISPLAY_VERSION=$(sanitize_version "$DISPLAY_VERSION_RAW")
+          APP_BUILD_NUMBER=$(sanitize_build "$BUILD_NUMBER_RAW")
+
+          echo "Stamping CFBundleShortVersionString=$APP_DISPLAY_VERSION"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $APP_DISPLAY_VERSION" "$INFO_PLIST"
+          echo "Stamping CFBundleVersion=$APP_BUILD_NUMBER"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $APP_BUILD_NUMBER" "$INFO_PLIST"
+
+          # Persist for later workflow steps, including dotnet publish and App Store upload metadata.
+          printf 'export APP_DISPLAY_VERSION=%q\n' "$APP_DISPLAY_VERSION" >> "$CM_ENV"
+          printf 'export APP_BUILD_NUMBER=%q\n' "$APP_BUILD_NUMBER" >> "$CM_ENV"
+
       - name: Publish .NET MAUI iOS app
         script: |
           set -euo pipefail
@@ -172,6 +247,8 @@ workflows:
           : "${PROVISIONING_PROFILE_UUID:?Missing PROVISIONING_PROFILE_UUID from signing step}"
           : "${SIGNING_KEYCHAIN_PATH:?Missing SIGNING_KEYCHAIN_PATH from signing step}"
           : "${APP_IDENTIFIER:?Define APP_IDENTIFIER in workflow vars or Codemagic env groups}"
+          : "${APP_DISPLAY_VERSION:?Stamp Info.plist version numbers before publishing}"
+          : "${APP_BUILD_NUMBER:?Stamp Info.plist version numbers before publishing}"
           export PATH="$DOTNET_ROOT:$PATH"
           dotnet publish BibleQuestForKids/BibleQuestForKids.csproj \
             -c Release \
@@ -181,6 +258,8 @@ workflows:
             -p:CreatePackage=true \
             -p:ApplicationId="$APP_IDENTIFIER" \
             -p:CFBundleIdentifier="$APP_IDENTIFIER" \
+            -p:ApplicationDisplayVersion="$APP_DISPLAY_VERSION" \
+            -p:ApplicationVersion="$APP_BUILD_NUMBER" \
             -p:CodesignKey="$IOS_CODESIGN_IDENTITY" \
             -p:CodesignProvision="$PROVISIONING_PROFILE_UUID" \
             -p:CodesignKeychain="$SIGNING_KEYCHAIN_PATH"
