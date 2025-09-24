@@ -8,10 +8,18 @@
     <SingleProject>true</SingleProject>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <ApplicationId>app.biblequest</ApplicationId>
     <SupportedOSPlatformVersion>13.0</SupportedOSPlatformVersion>
     <SupportedOrientations>Portrait Landscape</SupportedOrientations>
 
+  </PropertyGroup>
+
+  <!-- Keep platform identifiers explicit so Codemagic signing always matches. -->
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0-ios'">
+    <CFBundleIdentifier>app.biblequest</CFBundleIdentifier>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0-android'">
+    <ApplicationId>app.biblequest</ApplicationId>
   </PropertyGroup>
 
   <ItemGroup>
