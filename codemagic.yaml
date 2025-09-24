@@ -148,6 +148,19 @@ workflows:
           printf 'export IOS_CODESIGN_IDENTITY=%q\n' "$IOS_CODESIGN_IDENTITY" >> "$CM_ENV"
           printf 'export KEYCHAIN_PASSWORD=%q\n' "$KEYCHAIN_PASSWORD" >> "$CM_ENV"  # helpful for debugging follow-up steps
 
+      - name: Align Info.plist bundle ID with provisioning profile
+        script: |
+          set -euo pipefail
+          : "${APP_IDENTIFIER:?Define APP_IDENTIFIER in workflow vars or Codemagic env groups}"
+          INFO_PLIST="BibleQuestForKids/Platforms/iOS/Info.plist"
+          CURRENT_ID=$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$INFO_PLIST")
+          if [ "$CURRENT_ID" != "$APP_IDENTIFIER" ]; then
+            echo "Updating CFBundleIdentifier from '$CURRENT_ID' to '$APP_IDENTIFIER'"
+            /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $APP_IDENTIFIER" "$INFO_PLIST"
+          else
+            echo "CFBundleIdentifier already matches $APP_IDENTIFIER"
+          fi
+
       - name: Publish .NET MAUI iOS app
         script: |
           set -euo pipefail
