@@ -39,39 +39,12 @@
     <IosAppIconBase64 Include="Platforms\iOS\Assets.xcassets\AppIcon.appiconset\*.base64" />
   </ItemGroup>
 
-  <UsingTask TaskName="DecodeBase64Icons"
-             TaskFactory="CodeTaskFactory"
-             AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
-    <ParameterGroup>
-      <SourceFiles ParameterType="Microsoft.Build.Framework.ITaskItem[]" Required="true" />
-    </ParameterGroup>
-    <Task>
-      <Reference Include="System" />
-      <Reference Include="System.Linq" />
-      <Using Namespace="System" />
-      <Using Namespace="System.IO" />
-      <Using Namespace="System.Linq" />
-      <Code Type="Fragment" Language="cs">
-        <![CDATA[
-        foreach (var file in SourceFiles)
-        {
-            var sourcePath = file.GetMetadata("FullPath");
-            var targetPath = Path.ChangeExtension(sourcePath, ".png");
-            var raw = File.ReadAllText(sourcePath);
-            var compact = new string(raw.Where(c => !char.IsWhiteSpace(c)).ToArray());
-            var bytes = Convert.FromBase64String(compact);
-            Directory.CreateDirectory(Path.GetDirectoryName(targetPath)!);
-            File.WriteAllBytes(targetPath, bytes);
-        }
-        ]]>
-      </Code>
-    </Task>
-  </UsingTask>
-
   <Target Name="MaterializeIosAppIcons"
           BeforeTargets="PrepareForBuild"
           Condition="'$(TargetFramework)' == 'net8.0-ios'">
-    <DecodeBase64Icons SourceFiles="@(IosAppIconBase64)" />
+    <!-- Use the shared Python helper to keep icons in source control as text. -->
+    <Message Text="Materializing iOS AppIcon PNGs from base64 sources." Importance="high" />
+    <Exec Command="python3 &quot;$(MSBuildProjectDirectory)/Platforms/iOS/Assets.xcassets/AppIcon.appiconset/materialize_icons.py&quot;" />
   </Target>
 
   <ItemGroup>
