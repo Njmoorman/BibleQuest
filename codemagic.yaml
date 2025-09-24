@@ -203,7 +203,7 @@ workflows:
           fi
           # Keep validation logic in a standalone script so Base44/Codemagic runs stay readable.
           python3 "$ICONSET/validate_icons.py" "$ICONSET"
-
+          
       - name: Publish .NET MAUI iOS app
         script: |
           set -euo pipefail
