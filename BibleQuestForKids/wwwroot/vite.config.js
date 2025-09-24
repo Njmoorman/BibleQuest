@@ -4,6 +4,9 @@ import path from 'path'
 
 // https://vite.dev/config/
 export default defineConfig({
+  // Build relative paths so the bundled assets work when loaded from
+  // the on-device file system (e.g., TestFlight installs).
+  base: './',
   plugins: [react()],
   server: {
     allowedHosts: true
@@ -21,4 +24,4 @@ export default defineConfig({
       },
     },
   },
-}) 
+})
