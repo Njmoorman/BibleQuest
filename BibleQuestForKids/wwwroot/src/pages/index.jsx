@@ -60,7 +60,9 @@ import BibleChapter from "./BibleChapter";
 
 import BibleFavorites from "./BibleFavorites";
 
-import { BrowserRouter as Router, Route, Routes, useLocation } from 'react-router-dom';
+// HashRouter ensures navigation still works when the bundle is loaded from the
+// MAUI WebView's app bundle (no server-side routing available).
+import { HashRouter as Router, Route, Routes, useLocation } from 'react-router-dom';
 
 const PAGES = {
     
