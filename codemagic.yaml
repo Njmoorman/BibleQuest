@@ -16,7 +16,7 @@ workflows:
       cocoapods: default
       node: 18.16.0
       groups:
-        - appstore_credentials  # 👈 keep signing assets + ASC API key in this Codemagic group
+        - appstore_credentials
       vars:
         DOTNET_ROOT: /Users/builder/.dotnet
         DOTNET_CLI_HOME: /Users/builder/.dotnet
@@ -25,7 +25,7 @@ workflows:
         APP_IDENTIFIER: app.biblequest
         TEAM_ID: 2989BXM365
     integrations:
-      app_store_connect: CODE MAGIC API - Distribution (Admin)   # 👈 must match your integration name exactly in Codemagic
+      app_store_connect: CODE MAGIC API - Distribution (Admin)
     triggering:
       events:
         - push
@@ -50,7 +50,7 @@ workflows:
           export PATH="$DOTNET_ROOT:$PATH"
           mkdir -p "$HOME/.dotnet/temp"
           dotnet workload install maui-ios --skip-manifest-update --temp-dir "$HOME/.dotnet/temp"
-          dotnet workload restore BibleQuestForKids/BibleQuestForKids.csproj   # explicitly target the MAUI project so Codemagic sees it
+          dotnet workload restore BibleQuestForKids/BibleQuestForKids.csproj
 
       - name: Build bundled web assets (npm)
         script: |
@@ -68,10 +68,6 @@ workflows:
       - name: Configure Apple signing assets
         script: |
           set -euo pipefail
-          # Helper that returns the name of the first populated environment
-          # variable from the provided list. This lets you keep your existing
-          # Codemagic variable names (for example, CM_CERTIFICATE_P12) without
-          # editing the script.
           pick_env_name() {
             for var_name in "$@"; do
               eval "value=\${$var_name-}"
@@ -84,15 +80,10 @@ workflows:
             exit 1
           }
 
-          # Certificate (.p12), its password, and the provisioning profile must be
-          # uploaded to Codemagic as base64 strings. Accepted variable names are,
-          # in priority order, the ones listed in each call below.
           CERTIFICATE_VAR=$(pick_env_name IOS_CERTIFICATE_P12 CM_CERTIFICATE_P12 IOS_DISTRIBUTION_CERTIFICATE APPLE_CERTIFICATE_P12 APPLE_DISTRIBUTION_CERTIFICATE CERTIFICATE_PRIVATE_KEY)
           PASSWORD_VAR=$(pick_env_name IOS_CERTIFICATE_PASSWORD CM_CERTIFICATE_PASSWORD IOS_DISTRIBUTION_CERTIFICATE_PASSWORD APPLE_CERTIFICATE_PASSWORD APPLE_DISTRIBUTION_CERTIFICATE_PASSWORD CERTIFICATE_PASSWORD)
           PROFILE_VAR=$(pick_env_name IOS_PROVISIONING_PROFILE CM_PROVISIONING_PROFILE IOS_DISTRIBUTION_PROFILE APPLE_PROVISIONING_PROFILE IOS_PROVISIONING_PROFILE_BASE64 PROVISIONING_PROFILE)
 
-          # Generate a temporary keychain password for this build so we don't need
-          # to store one in Codemagic.
           KEYCHAIN_PASSWORD="$(openssl rand -hex 16)"
 
           SIGNING_DIR="$HOME/codemagic-signing"
@@ -106,12 +97,10 @@ workflows:
           echo "Using signing certificate from \"$CERTIFICATE_VAR\""
           echo "Using provisioning profile from \"$PROFILE_VAR\""
 
-          # Decode assets from the selected environment variables
           eval "printf '%s' \"\${$CERTIFICATE_VAR}\"" | base64 --decode > "$CERT_PATH"
           eval "printf '%s' \"\${$PROFILE_VAR}\"" | base64 --decode > "$PROFILE_TMP"
           CERTIFICATE_PASSWORD=$(eval "printf '%s' \"\${$PASSWORD_VAR}\"")
 
-          # Prepare a dedicated, unlocked keychain for the build
           security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
@@ -121,14 +110,12 @@ workflows:
           security import "$CERT_PATH" -k "$KEYCHAIN_PATH" -P "$CERTIFICATE_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
           security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
-          # Install provisioning profile and capture its UUID for signing
           PROFILE_PLIST=$(security cms -D -i "$PROFILE_TMP")
           PROFILE_UUID=$(/usr/libexec/PlistBuddy -c 'Print UUID' /dev/stdin <<< "$PROFILE_PLIST")
           PROFILE_NAME=$(/usr/libexec/PlistBuddy -c 'Print Name' /dev/stdin <<< "$PROFILE_PLIST")
           mv "$PROFILE_TMP" "$PROFILES_DIR/$PROFILE_UUID.mobileprovision"
           echo "Installed provisioning profile '$PROFILE_NAME' ($PROFILE_UUID)"
 
-          # Detect the imported signing identity so we can feed it to dotnet publish
           IOS_IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | awk -F '"' 'NR==1 {print $2}')
           if [ -z "$IOS_IDENTITY" ]; then
             echo "No signing identity available" >&2
@@ -136,8 +123,6 @@ workflows:
           fi
           echo "Using signing identity: $IOS_IDENTITY"
 
-          # Share values with later scripts in this workflow
-          # Export for this script and persist for later workflow steps
           export SIGNING_KEYCHAIN_PATH="$KEYCHAIN_PATH"
           export PROVISIONING_PROFILE_UUID="$PROFILE_UUID"
           export IOS_CODESIGN_IDENTITY="$IOS_IDENTITY"
@@ -146,7 +131,7 @@ workflows:
           printf 'export SIGNING_KEYCHAIN_PATH=%q\n' "$SIGNING_KEYCHAIN_PATH" >> "$CM_ENV"
           printf 'export PROVISIONING_PROFILE_UUID=%q\n' "$PROVISIONING_PROFILE_UUID" >> "$CM_ENV"
           printf 'export IOS_CODESIGN_IDENTITY=%q\n' "$IOS_CODESIGN_IDENTITY" >> "$CM_ENV"
-          printf 'export KEYCHAIN_PASSWORD=%q\n' "$KEYCHAIN_PASSWORD" >> "$CM_ENV"  # helpful for debugging follow-up steps
+          printf 'export KEYCHAIN_PASSWORD=%q\n' "$KEYCHAIN_PASSWORD" >> "$CM_ENV"
 
       - name: Align Info.plist bundle ID with provisioning profile
         script: |
@@ -166,73 +151,40 @@ workflows:
           set -euo pipefail
           INFO_PLIST="BibleQuestForKids/Platforms/iOS/Info.plist"
 
-          # Accept version inputs from your Codemagic environment (APP_VERSION or APP_DISPLAY_VERSION),
-          # fall back to tag names like "v1.2.3", or use a safe default for local runs.
           pick_display_version() {
             if [ -n "${APP_VERSION-}" ]; then
-              printf '%s' "$APP_VERSION"
-              return
+              printf '%s' "$APP_VERSION"; return
             fi
             if [ -n "${APP_DISPLAY_VERSION-}" ]; then
-              printf '%s' "$APP_DISPLAY_VERSION"
-              return
+              printf '%s' "$APP_DISPLAY_VERSION"; return
             fi
             if [ -n "${CM_TAG-}" ]; then
-              printf '%s' "${CM_TAG#v}"
-              return
+              printf '%s' "${CM_TAG#v}"; return
             fi
             printf '1.0.0'
           }
 
           pick_build_number() {
             if [ -n "${APP_BUILD_NUMBER-}" ]; then
-              printf '%s' "$APP_BUILD_NUMBER"
-              return
+              printf '%s' "$APP_BUILD_NUMBER"; return
             fi
             if [ -n "${BUILD_NUMBER-}" ]; then
-              printf '%s' "$BUILD_NUMBER"
-              return
+              printf '%s' "$BUILD_NUMBER"; return
             fi
             if [ -n "${CM_BUILD_ID-}" ]; then
-              printf '%s' "$CM_BUILD_ID"
-              return
+              printf '%s' "$CM_BUILD_ID"; return
             fi
             printf '1'
           }
 
-          DISPLAY_VERSION_RAW=$(pick_display_version)
-          BUILD_NUMBER_RAW=$(pick_build_number)
-
-          # Apple requires one to three dot-separated integers. Strip any stray characters and validate.
-          sanitize_version() {
-            local value
-            value=$(printf '%s' "$1" | tr -cd '0-9.')
-            if [ -z "$value" ] || ! printf '%s' "$value" | grep -Eq '^[0-9]+(\.[0-9]+){0,2}$'; then
-              echo "Invalid version format '$1'. Provide APP_VERSION like 1.2.3" >&2
-              exit 1
-            fi
-            printf '%s' "$value"
-          }
-
-          sanitize_build() {
-            local value
-            value=$(printf '%s' "$1" | tr -cd '0-9.')
-            if [ -z "$value" ] || ! printf '%s' "$value" | grep -Eq '^[0-9]+(\.[0-9]+){0,2}$'; then
-              echo "Invalid build number '$1'. Provide APP_BUILD_NUMBER like 42" >&2
-              exit 1
-            fi
-            printf '%s' "$value"
-          }
-
-          APP_DISPLAY_VERSION=$(sanitize_version "$DISPLAY_VERSION_RAW")
-          APP_BUILD_NUMBER=$(sanitize_build "$BUILD_NUMBER_RAW")
+          APP_DISPLAY_VERSION=$(pick_display_version)
+          APP_BUILD_NUMBER=$(pick_build_number)
 
           echo "Stamping CFBundleShortVersionString=$APP_DISPLAY_VERSION"
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $APP_DISPLAY_VERSION" "$INFO_PLIST"
           echo "Stamping CFBundleVersion=$APP_BUILD_NUMBER"
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $APP_BUILD_NUMBER" "$INFO_PLIST"
 
-          # Persist for later workflow steps, including dotnet publish and App Store upload metadata.
           printf 'export APP_DISPLAY_VERSION=%q\n' "$APP_DISPLAY_VERSION" >> "$CM_ENV"
           printf 'export APP_BUILD_NUMBER=%q\n' "$APP_BUILD_NUMBER" >> "$CM_ENV"
 
@@ -250,90 +202,88 @@ workflows:
             exit 1
           fi
           python3 - <<'PY'
-import json, plistlib, struct, sys
-from pathlib import Path
+            import json, plistlib, struct, sys
+            from pathlib import Path
 
-iconset = Path("BibleQuestForKids/Platforms/iOS/Assets.xcassets/AppIcon.appiconset")
-contents_path = iconset / "Contents.json"
-if not contents_path.exists():
-    sys.exit(f"Missing {contents_path}")
-data = json.loads(contents_path.read_text())
-filenames = {img.get("filename") for img in data.get("images", []) if img.get("filename")}
-required = {"Icon-40@3x.png", "Icon-60@2x.png", "Icon-1024.png"}
-missing = sorted(required - filenames)
-if missing:
-    sys.exit("Missing required icon files: " + ", ".join(missing))
+            iconset = Path("BibleQuestForKids/Platforms/iOS/Assets.xcassets/AppIcon.appiconset")
+            contents_path = iconset / "Contents.json"
+            if not contents_path.exists():
+                sys.exit(f"Missing {contents_path}")
+            data = json.loads(contents_path.read_text())
+            filenames = {img.get("filename") for img in data.get("images", []) if img.get("filename")}
+            required = {"Icon-40@3x.png", "Icon-60@2x.png", "Icon-1024.png"}
+            missing = sorted(required - filenames)
+            if missing:
+                sys.exit("Missing required icon files: " + ", ".join(missing))
 
-base64_sources = {
-    f"{name.rsplit('.', 1)[0]}.base64"
-    for name in filenames
-}
-missing_base64 = sorted(source for source in base64_sources if not (iconset / source).exists())
-if missing_base64:
-    sys.exit("Missing base64 icon sources: " + ", ".join(missing_base64))
+            base64_sources = {
+                f"{name.rsplit('.', 1)[0]}.base64"
+                for name in filenames
+            }
+            missing_base64 = sorted(source for source in base64_sources if not (iconset / source).exists())
+            if missing_base64:
+                sys.exit("Missing base64 icon sources: " + ", ".join(missing_base64))
 
-def png_size(path):
-    with path.open("rb") as png:
-        if png.read(8) != b"\x89PNG\r\n\x1a\n":
-            sys.exit(f"{path.name} is not a valid PNG signature")
-        length = struct.unpack(">I", png.read(4))[0]
-        chunk_type = png.read(4)
-        if chunk_type != b"IHDR":
-            sys.exit(f"{path.name} missing IHDR header")
-        width, height = struct.unpack(">II", png.read(8))
-        # Skip the rest of the IHDR chunk payload if the length was longer than 8 bytes.
-        remaining = length - 8
-        if remaining > 0:
-            png.seek(remaining, 1)
-        return width, height
+            def png_size(path):
+                with path.open("rb") as png:
+                    if png.read(8) != b"\x89PNG\r\n\x1a\n":
+                        sys.exit(f"{path.name} is not a valid PNG signature")
+                    length = struct.unpack(">I", png.read(4))[0]
+                    chunk_type = png.read(4)
+                    if chunk_type != b"IHDR":
+                        sys.exit(f"{path.name} missing IHDR header")
+                    width, height = struct.unpack(">II", png.read(8))
+                    remaining = length - 8
+                    if remaining > 0:
+                        png.seek(remaining, 1)
+                    return width, height
 
-expected_dimensions = {
-    "Icon-40@3x.png": (120, 120),
-    "Icon-60@2x.png": (120, 120),
-    "Icon-1024.png": (1024, 1024),
-}
-for filename, (expected_w, expected_h) in expected_dimensions.items():
-    image_path = iconset / filename
-    if not image_path.exists():
-        sys.exit(f"{filename} missing from disk even though Contents.json references it")
-    width, height = png_size(image_path)
-    if (width, height) != (expected_w, expected_h):
-        sys.exit(f"{filename} should be {expected_w}x{expected_h}, found {width}x{height}")
+            expected_dimensions = {
+                "Icon-40@3x.png": (120, 120),
+                "Icon-60@2x.png": (120, 120),
+                "Icon-1024.png": (1024, 1024),
+            }
+            for filename, (expected_w, expected_h) in expected_dimensions.items():
+                image_path = iconset / filename
+                if not image_path.exists():
+                    sys.exit(f"{filename} missing from disk even though Contents.json references it")
+                width, height = png_size(image_path)
+                if (width, height) != (expected_w, expected_h):
+                    sys.exit(f"{filename} should be {expected_w}x{expected_h}, found {width}x{height}")
 
-info_path = Path("BibleQuestForKids/Platforms/iOS/Info.plist")
-with info_path.open("rb") as plist_file:
-    plist = plistlib.load(plist_file)
+            info_path = Path("BibleQuestForKids/Platforms/iOS/Info.plist")
+            with info_path.open("rb") as plist_file:
+                plist = plistlib.load(plist_file)
 
-def extract_icon_name(root_key):
-    value = plist.get(root_key)
-    if isinstance(value, dict):
-        primary = value.get("CFBundlePrimaryIcon")
-        if isinstance(primary, dict):
-            return primary.get("CFBundleIconName")
-    return None
+            def extract_icon_name(root_key):
+                value = plist.get(root_key)
+                if isinstance(value, dict):
+                    primary = value.get("CFBundlePrimaryIcon")
+                    if isinstance(primary, dict):
+                        return primary.get("CFBundleIconName")
+                return None
 
-icon_name = plist.get("CFBundleIconName")
-if icon_name != "AppIcon":
-    sys.exit(f"CFBundleIconName should be 'AppIcon', found {icon_name!r}")
+            icon_name = plist.get("CFBundleIconName")
+            if icon_name != "AppIcon":
+                sys.exit(f"CFBundleIconName should be 'AppIcon', found {icon_name!r}")
 
-for scope in ("CFBundleIcons", "CFBundleIcons~ipad"):
-    scoped_name = extract_icon_name(scope)
-    if scoped_name != "AppIcon":
-        sys.exit(f"{scope}/CFBundlePrimaryIcon/CFBundleIconName should be 'AppIcon', found {scoped_name!r}")
+            for scope in ("CFBundleIcons", "CFBundleIcons~ipad"):
+                scoped_name = extract_icon_name(scope)
+                if scoped_name != "AppIcon":
+                    sys.exit(f"{scope}/CFBundlePrimaryIcon/CFBundleIconName should be 'AppIcon', found {scoped_name!r}")
 
-xs_assets = plist.get("XSAppIconAssets")
-expected_asset_path = "Assets.xcassets/AppIcon.appiconset"
-if xs_assets != expected_asset_path:
-    sys.exit(f"XSAppIconAssets should be '{expected_asset_path}', found {xs_assets!r}")
+            xs_assets = plist.get("XSAppIconAssets")
+            expected_asset_path = "Assets.xcassets/AppIcon.appiconset"
+            if xs_assets != expected_asset_path:
+                sys.exit(f"XSAppIconAssets should be '{expected_asset_path}', found {xs_assets!r}")
 
-print("iOS icon catalog validated.")
-PY
+            print("iOS icon catalog validated.")
+          PY
 
       - name: Publish .NET MAUI iOS app
         script: |
           set -euo pipefail
           if [ -f "${CM_ENV-}" ]; then
-            # shellcheck source=/dev/null
             . "$CM_ENV"
           fi
           : "${IOS_CODESIGN_IDENTITY:?Missing IOS_CODESIGN_IDENTITY from signing step}"
