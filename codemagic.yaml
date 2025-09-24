@@ -29,6 +29,7 @@ workflows:
     triggering:
       events:
         - push
+        - pull_request   # Catch PR changes before merge to keep TestFlight/App Store ready
       branch_patterns:
         - pattern: main
           include: true
