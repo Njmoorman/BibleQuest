@@ -63,6 +63,9 @@ BibleQuestForKids/wwwroot/.nx/
 BibleQuestForKids/wwwroot/.tmp/
 BibleQuestForKids/wwwroot/.sass-cache/
 
+# Generated iOS AppIcon PNGs (materialized from *.base64 to satisfy App Store)
+BibleQuestForKids/Platforms/iOS/Assets.xcassets/AppIcon.appiconset/Icon-*.png
+
 # Front-end local environment and log files
 BibleQuestForKids/wwwroot/.env*
 BibleQuestForKids/wwwroot/npm-debug.log*

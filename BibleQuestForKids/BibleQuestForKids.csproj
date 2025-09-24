@@ -28,12 +28,51 @@
     </MauiAsset>
   </ItemGroup>
 
-  <ItemGroup>
-    <!-- Generate the iOS app icon set (includes the required 120x120 asset). -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net8.0-android'">
+    <!-- Generates adaptive/mipmap icons for Android only. iOS ships the curated asset catalog instead. -->
     <MauiIcon Include="Resources\AppIcon\appicon.svg"
               ForegroundFile="Resources\AppIcon\appiconfg.svg"
               Color="#1B365D" />
   </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net8.0-ios'">
+    <IosAppIconBase64 Include="Platforms\iOS\Assets.xcassets\AppIcon.appiconset\*.base64" />
+  </ItemGroup>
+
+  <UsingTask TaskName="DecodeBase64Icons"
+             TaskFactory="CodeTaskFactory"
+             AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <SourceFiles ParameterType="Microsoft.Build.Framework.ITaskItem[]" Required="true" />
+    </ParameterGroup>
+    <Task>
+      <Reference Include="System" />
+      <Reference Include="System.Linq" />
+      <Using Namespace="System" />
+      <Using Namespace="System.IO" />
+      <Using Namespace="System.Linq" />
+      <Code Type="Fragment" Language="cs">
+        <![CDATA[
+        foreach (var file in SourceFiles)
+        {
+            var sourcePath = file.GetMetadata("FullPath");
+            var targetPath = Path.ChangeExtension(sourcePath, ".png");
+            var raw = File.ReadAllText(sourcePath);
+            var compact = new string(raw.Where(c => !char.IsWhiteSpace(c)).ToArray());
+            var bytes = Convert.FromBase64String(compact);
+            Directory.CreateDirectory(Path.GetDirectoryName(targetPath)!);
+            File.WriteAllBytes(targetPath, bytes);
+        }
+        ]]>
+      </Code>
+    </Task>
+  </UsingTask>
+
+  <Target Name="MaterializeIosAppIcons"
+          BeforeTargets="PrepareForBuild"
+          Condition="'$(TargetFramework)' == 'net8.0-ios'">
+    <DecodeBase64Icons SourceFiles="@(IosAppIconBase64)" />
+  </Target>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Maui.Controls" Version="8.0.*" />
