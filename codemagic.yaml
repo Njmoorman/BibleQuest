@@ -158,6 +158,7 @@ workflows:
           : "${IOS_CODESIGN_IDENTITY:?Missing IOS_CODESIGN_IDENTITY from signing step}"
           : "${PROVISIONING_PROFILE_UUID:?Missing PROVISIONING_PROFILE_UUID from signing step}"
           : "${SIGNING_KEYCHAIN_PATH:?Missing SIGNING_KEYCHAIN_PATH from signing step}"
+          : "${APP_IDENTIFIER:?Define APP_IDENTIFIER in workflow vars or Codemagic env groups}"
           export PATH="$DOTNET_ROOT:$PATH"
           dotnet publish BibleQuestForKids/BibleQuestForKids.csproj \
             -c Release \
@@ -165,6 +166,8 @@ workflows:
             -p:RuntimeIdentifier=ios-arm64 \
             -p:ArchiveOnBuild=true \
             -p:CreatePackage=true \
+            -p:ApplicationId="$APP_IDENTIFIER" \
+            -p:CFBundleIdentifier="$APP_IDENTIFIER" \
             -p:CodesignKey="$IOS_CODESIGN_IDENTITY" \
             -p:CodesignProvision="$PROVISIONING_PROFILE_UUID" \
             -p:CodesignKeychain="$SIGNING_KEYCHAIN_PATH"
