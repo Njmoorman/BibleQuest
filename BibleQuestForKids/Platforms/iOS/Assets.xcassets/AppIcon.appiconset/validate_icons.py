@@ -16,6 +16,7 @@ EXPECTED_DIMENSIONS = {
     "Icon-60@2x.png": (120, 120),
     "Icon-1024.png": (1024, 1024),
 }
+FORBIDDEN_COLOR_TYPES = {4, 6}  # These represent PNG formats that include alpha channels.
 EXPECTED_ICONSET_NAME = "AppIcon"
 EXPECTED_XS_ASSET_PATH = "Assets.xcassets/AppIcon.appiconset"
 
@@ -40,7 +41,7 @@ def ensure_base64_sources(iconset: Path, filenames: set[str]) -> None:
         raise SystemExit("Missing base64 icon sources: " + ", ".join(missing_sources))
 
 
-def png_size(path: Path) -> tuple[int, int]:
+def png_header(path: Path) -> tuple[int, int, int]:
     with path.open("rb") as png:
         if png.read(8) != b"\x89PNG\r\n\x1a\n":
             raise SystemExit(f"{path.name} is not a valid PNG signature")
@@ -48,24 +49,30 @@ def png_size(path: Path) -> tuple[int, int]:
         chunk_type = png.read(4)
         if chunk_type != b"IHDR":
             raise SystemExit(f"{path.name} missing IHDR header")
-        width, height = struct.unpack(">II", png.read(8))
-        remaining = length - 8
-        if remaining > 0:
-            png.seek(remaining, 1)
-        return width, height
+        if length != 13:
+            raise SystemExit(f"{path.name} IHDR chunk has unexpected length {length}")
+        width, height, bit_depth, color_type, compression, filter_method, interlace = struct.unpack(
+            ">IIBBBBB", png.read(13)
+        )
+        return width, height, color_type
 
 
-def ensure_dimensions(iconset: Path) -> None:
+def ensure_dimensions_and_color(iconset: Path) -> None:
     for filename, (expected_w, expected_h) in EXPECTED_DIMENSIONS.items():
         image_path = iconset / filename
         if not image_path.exists():
             raise SystemExit(
                 f"{filename} missing from disk even though Contents.json references it"
             )
-        width, height = png_size(image_path)
+        width, height, color_type = png_header(image_path)
         if (width, height) != (expected_w, expected_h):
             raise SystemExit(
                 f"{filename} should be {expected_w}x{expected_h}, found {width}x{height}"
+            )
+        if color_type in FORBIDDEN_COLOR_TYPES:
+            raise SystemExit(
+                f"{filename} includes an alpha channel (PNG color type {color_type}). "
+                "Marketing icons must be fully opaque."
             )
 
 
@@ -117,7 +124,7 @@ def validate_iconset(iconset: Path) -> None:
 
     ensure_required_pngs(filenames)
     ensure_base64_sources(iconset, filenames)
-    ensure_dimensions(iconset)
+    ensure_dimensions_and_color(iconset)
     ensure_info_plist_settings(INFO_PLIST_PATH)
 
 
