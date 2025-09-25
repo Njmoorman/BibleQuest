@@ -32,25 +32,46 @@ public partial class MainPage : ContentPage
         // React/Vite assets are produced into wwwroot/dist via `npm run build`.
         // Codemagic runs this step before each MAUI build (see codemagic.yaml),
         // but developers should re-run it locally whenever the web app changes.
-        const string buildFolderName = "dist";
         const string cacheFolderName = "webview";
 
-        var targetRoot = Path.Combine(FileSystem.AppDataDirectory, cacheFolderName);
-        var targetDist = Path.Combine(targetRoot, buildFolderName);
-        var indexPath = Path.Combine(targetDist, "index.html");
+        var packageRoot = GetPackageAssetRoot();
+        var cacheRoot = Path.Combine(FileSystem.AppDataDirectory, cacheFolderName);
+        Directory.CreateDirectory(cacheRoot);
 
-        if (!File.Exists(indexPath))
+        // Prefer the production bundle (wwwroot/dist) but fall back to the development
+        // root (wwwroot) when running without a compiled build. This mirrors the
+        // documented workflow of running `npm run build` before packaging while still
+        // supporting quick debug iterations.
+        foreach (var relativeRoot in new[] { "dist", string.Empty })
         {
-            var packageDist = Path.Combine(GetPackageAssetRoot(), buildFolderName);
-            CopyDirectory(packageDist, targetDist);
+            var packageAssetRoot = string.IsNullOrEmpty(relativeRoot)
+                ? packageRoot
+                : Path.Combine(packageRoot, relativeRoot);
+
+            var packageIndex = Path.Combine(packageAssetRoot, "index.html");
+            if (!File.Exists(packageIndex))
+            {
+                continue;
+            }
+
+            var targetAssetRoot = string.IsNullOrEmpty(relativeRoot)
+                ? cacheRoot
+                : Path.Combine(cacheRoot, relativeRoot);
+
+            var targetIndex = Path.Combine(targetAssetRoot, "index.html");
+
+            if (!File.Exists(targetIndex))
+            {
+                CopyDirectory(packageAssetRoot, targetAssetRoot);
+            }
+
+            if (File.Exists(targetIndex))
+            {
+                return targetIndex;
+            }
         }
 
-        if (!File.Exists(indexPath))
-        {
-            throw new FileNotFoundException("Unable to locate the bundled web assets.", indexPath);
-        }
-
-        return indexPath;
+        throw new FileNotFoundException("Unable to locate the bundled web assets.", packageRoot);
     }
 
     private static string GetPackageAssetRoot()
