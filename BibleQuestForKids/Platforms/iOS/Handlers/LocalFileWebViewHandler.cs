@@ -35,9 +35,25 @@ public sealed class LocalFileWebViewHandler : WebViewHandler
     protected override WKWebView CreatePlatformView()
     {
         var configuration = new WKWebViewConfiguration();
-        configuration.SetValueForKey(NSNumber.FromBoolean(true), AllowFileAccessKey);
-        configuration.SetValueForKey(NSNumber.FromBoolean(true), AllowUniversalFileAccessKey);
+
+        TryEnableLegacyFileSchemeAccess(configuration);
+
         return new WKWebView(CGRect.Empty, configuration);
+    }
+
+    private static void TryEnableLegacyFileSchemeAccess(WKWebViewConfiguration configuration)
+    {
+        // iOS 18 throws when setting the private allowFileAccess* keys. Swallow the exception so the
+        // app keeps working while continuing to opt-in on older OS releases that still honour them.
+        try
+        {
+            configuration.SetValueForKey(NSNumber.FromBoolean(true), AllowFileAccessKey);
+            configuration.SetValueForKey(NSNumber.FromBoolean(true), AllowUniversalFileAccessKey);
+        }
+        catch (NSUnknownKeyException)
+        {
+            // The keys were removed by Apple; rely on the platform defaults.
+        }
     }
 
     private static void MapSource(LocalFileWebViewHandler handler, IWebView webView)
