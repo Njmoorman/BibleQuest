@@ -24,6 +24,7 @@ workflows:
         DOTNET_CLI_TELEMETRY_OPTOUT: "1"
         APP_IDENTIFIER: app.biblequest
         TEAM_ID: 2989BXM365
+        VITE_BASE44_REQUIRE_AUTH: "false" # Keep TestFlight builds usable until login UX is ready
     integrations:
       app_store_connect: CODE MAGIC API - Distribution (Admin)
     triggering:
