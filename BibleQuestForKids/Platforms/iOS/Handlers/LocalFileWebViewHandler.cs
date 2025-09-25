@@ -2,6 +2,8 @@
 using System;
 using CoreGraphics;
 using Foundation;
+using Microsoft.Maui;
+using Microsoft.Maui.Controls;
 using Microsoft.Maui.Handlers;
 using WebKit;
 
@@ -16,6 +18,20 @@ public sealed class LocalFileWebViewHandler : WebViewHandler
     private static readonly NSString AllowFileAccessKey = new("allowFileAccessFromFileURLs");
     private static readonly NSString AllowUniversalFileAccessKey = new("allowUniversalAccessFromFileURLs");
 
+    private static readonly PropertyMapper<IWebView, LocalFileWebViewHandler> LocalMapper = new(WebViewHandler.Mapper);
+    private static readonly CommandMapper<IWebView, LocalFileWebViewHandler> LocalCommandMapper = new(WebViewHandler.CommandMapper);
+
+    static LocalFileWebViewHandler()
+    {
+        // Ensure bundled Vite assets resolve correctly when navigating to file:// URLs.
+        LocalMapper.AppendToMapping(nameof(IWebView.Source), MapSource);
+    }
+
+    public LocalFileWebViewHandler()
+        : base(LocalMapper, LocalCommandMapper)
+    {
+    }
+
     protected override WKWebView CreatePlatformView()
     {
         var configuration = new WKWebViewConfiguration();
@@ -24,20 +40,27 @@ public sealed class LocalFileWebViewHandler : WebViewHandler
         return new WKWebView(CGRect.Empty, configuration);
     }
 
-    public override void LoadUrl(string? url)
+    private static void MapSource(LocalFileWebViewHandler handler, IWebView webView)
     {
-        if (!string.IsNullOrEmpty(url) && url.StartsWith("file:", StringComparison.OrdinalIgnoreCase))
+        if (handler.PlatformView is not WKWebView platformWebView)
+        {
+            WebViewHandler.MapSource(handler, webView);
+            return;
+        }
+
+        if (webView.Source is UrlWebViewSource { Url: { Length: > 0 } url } &&
+            url.StartsWith("file:", StringComparison.OrdinalIgnoreCase))
         {
             var fileUrl = NSUrl.FromString(url);
             if (fileUrl is not null)
             {
                 var readAccess = fileUrl.RemoveLastPathComponent();
-                PlatformView.LoadFileUrl(fileUrl, readAccess);
+                platformWebView.LoadFileUrl(fileUrl, readAccess);
                 return;
             }
         }
 
-        base.LoadUrl(url);
+        WebViewHandler.MapSource(handler, webView);
     }
 }
 #endif
