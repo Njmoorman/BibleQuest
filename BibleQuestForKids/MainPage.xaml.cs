@@ -1,3 +1,4 @@
+using Microsoft.Maui.ApplicationModel;
 using Microsoft.Maui.Controls;
 using Microsoft.Maui.Storage;
 using System;
@@ -11,6 +12,8 @@ namespace BibleQuestForKids;
 
 public partial class MainPage : ContentPage
 {
+    private bool _isBrowserInitialized;
+
     public MainPage()
     {
         InitializeComponent();
@@ -19,6 +22,12 @@ public partial class MainPage : ContentPage
 
     private void OnLoaded(object? sender, EventArgs e)
     {
+        if (_isBrowserInitialized)
+        {
+            return;
+        }
+
+        _isBrowserInitialized = true;
         Loaded -= OnLoaded;
 
         var indexPath = EnsureWebAssets();
@@ -35,8 +44,11 @@ public partial class MainPage : ContentPage
         const string cacheFolderName = "webview";
 
         var packageRoot = GetPackageAssetRoot();
-        var cacheRoot = Path.Combine(FileSystem.AppDataDirectory, cacheFolderName);
+        var versionKey = GetVersionStamp();
+        var cacheRoot = Path.Combine(FileSystem.AppDataDirectory, cacheFolderName, versionKey);
         Directory.CreateDirectory(cacheRoot);
+
+        PruneStaleCaches(Path.Combine(FileSystem.AppDataDirectory, cacheFolderName), versionKey);
 
         // Prefer the production bundle (wwwroot/dist) but fall back to the development
         // root (wwwroot) when running without a compiled build. This mirrors the
@@ -74,6 +86,13 @@ public partial class MainPage : ContentPage
         throw new FileNotFoundException("Unable to locate the bundled web assets.", packageRoot);
     }
 
+    private static string GetVersionStamp()
+    {
+        var version = AppInfo.Current.VersionString;
+        var build = AppInfo.Current.BuildString;
+        return string.IsNullOrEmpty(build) ? version : $"{version}-{build}";
+    }
+
     private static string GetPackageAssetRoot()
     {
 #if IOS || MACCATALYST
@@ -83,6 +102,33 @@ public partial class MainPage : ContentPage
         // For Android (and other targets) rely on MAUI's abstraction when available.
         return Path.Combine(FileSystem.AppPackageDirectory, "wwwroot");
 #endif
+    }
+
+    private static void PruneStaleCaches(string cacheBase, string activeStamp)
+    {
+        if (!Directory.Exists(cacheBase))
+        {
+            return;
+        }
+
+        foreach (var directory in Directory.GetDirectories(cacheBase))
+        {
+            var name = Path.GetFileName(directory);
+            if (string.Equals(name, activeStamp, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            try
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+            catch
+            {
+                // Ignore IO contention on best-effort cleanup. Leftover folders
+                // are harmless, but the active version stays intact.
+            }
+        }
     }
 
     private static void CopyDirectory(string sourceDir, string destinationDir)
