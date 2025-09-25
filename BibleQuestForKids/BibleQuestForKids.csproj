@@ -23,9 +23,19 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <MauiAsset Include="wwwroot\\dist\\**">
-      <LogicalName>wwwroot/dist/%(RecursiveDir)%(Filename)%(Extension)</LogicalName>
+    <MauiAsset Include="wwwroot\\**">
+      <LogicalName>wwwroot/%(RecursiveDir)%(Filename)%(Extension)</LogicalName>
     </MauiAsset>
+    <MauiAsset Remove="wwwroot\\src\\**" />
+    <MauiAsset Remove="wwwroot\\node_modules\\**" />
+    <MauiAsset Remove="wwwroot\\*.config.js" />
+    <MauiAsset Remove="wwwroot\\*.config.cjs" />
+    <MauiAsset Remove="wwwroot\\*.config.mjs" />
+    <MauiAsset Remove="wwwroot\\package.json" />
+    <MauiAsset Remove="wwwroot\\package-lock.json" />
+    <MauiAsset Remove="wwwroot\\README.md" />
+    <MauiAsset Remove="wwwroot\\components.json" />
+    <MauiAsset Remove="wwwroot\\jsconfig.json" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(TargetFramework)' == 'net8.0-android'">

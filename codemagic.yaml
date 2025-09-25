@@ -60,6 +60,18 @@ workflows:
           npm ci
           npm run build
 
+          # Replace the development sources with the production bundle so the MAUI asset
+          # mapping only ships hashed files that Vite emitted. `rsync --delete` keeps the
+          # target clean even if filenames change between builds.
+          rsync -a --delete dist/ ./
+
+          # Remove build-only artifacts so the IPA/TestFlight payload stays lean.
+          rm -rf dist
+          rm -rf src
+          rm -rf node_modules
+          rm -f package.json package-lock.json
+          rm -f vite.config.js tailwind.config.js postcss.config.js eslint.config.js jsconfig.json components.json README.md
+
       - name: Restore NuGet packages
         script: |
           set -euo pipefail

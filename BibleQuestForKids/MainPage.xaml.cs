@@ -1,3 +1,4 @@
+using Microsoft.Maui.ApplicationModel;
 using Microsoft.Maui.Controls;
 using Microsoft.Maui.Storage;
 using System;
@@ -11,15 +12,23 @@ namespace BibleQuestForKids;
 
 public partial class MainPage : ContentPage
 {
+    private bool _isInitialized;
+
     public MainPage()
     {
         InitializeComponent();
-        Loaded += OnLoaded;
     }
 
-    private void OnLoaded(object? sender, EventArgs e)
+    protected override void OnAppearing()
     {
-        Loaded -= OnLoaded;
+        base.OnAppearing();
+
+        if (_isInitialized)
+        {
+            return;
+        }
+
+        _isInitialized = true;
 
         var indexPath = EnsureWebAssets();
         var indexUri = new Uri(indexPath).AbsoluteUri;
@@ -29,20 +38,42 @@ public partial class MainPage : ContentPage
 
     private static string EnsureWebAssets()
     {
-        // React/Vite assets are produced into wwwroot/dist via `npm run build`.
+        // React/Vite assets are produced into wwwroot via `npm run build`.
         // Codemagic runs this step before each MAUI build (see codemagic.yaml),
         // but developers should re-run it locally whenever the web app changes.
-        const string buildFolderName = "dist";
         const string cacheFolderName = "webview";
+        const string versionFileName = ".bundle-version";
 
         var targetRoot = Path.Combine(FileSystem.AppDataDirectory, cacheFolderName);
-        var targetDist = Path.Combine(targetRoot, buildFolderName);
-        var indexPath = Path.Combine(targetDist, "index.html");
+        var indexPath = Path.Combine(targetRoot, "index.html");
+        var versionPath = Path.Combine(targetRoot, versionFileName);
 
-        if (!File.Exists(indexPath))
+        // Refresh cached assets whenever the packaged build number changes so
+        // TestFlight/App Store updates always pick up the latest React bundle.
+        var currentVersion = $"{AppInfo.Current.VersionString}+{AppInfo.Current.BuildString}";
+        var needsRefresh = !File.Exists(indexPath);
+
+        if (!needsRefresh && File.Exists(versionPath))
         {
-            var packageDist = Path.Combine(GetPackageAssetRoot(), buildFolderName);
-            CopyDirectory(packageDist, targetDist);
+            var cachedVersion = File.ReadAllText(versionPath).Trim();
+            needsRefresh = !string.Equals(cachedVersion, currentVersion, StringComparison.Ordinal);
+        }
+        else if (!File.Exists(versionPath))
+        {
+            needsRefresh = true;
+        }
+
+        if (needsRefresh)
+        {
+            if (Directory.Exists(targetRoot))
+            {
+                Directory.Delete(targetRoot, recursive: true);
+            }
+
+            var packagedRoot = GetPackageAssetRoot();
+            CopyDirectory(packagedRoot, targetRoot);
+            Directory.CreateDirectory(targetRoot);
+            File.WriteAllText(versionPath, currentVersion);
         }
 
         if (!File.Exists(indexPath))
