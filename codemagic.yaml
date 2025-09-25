@@ -60,6 +60,12 @@ workflows:
           npm ci
           npm run build
 
+          # The MAUI project (see BibleQuestForKids.csproj) only ships wwwroot/dist/**,
+          # so keep that folder intact and prune build-time dependencies to reduce the
+          # packaged payload.
+          rm -rf node_modules
+          rm -f package-lock.json
+
       - name: Restore NuGet packages
         script: |
           set -euo pipefail
