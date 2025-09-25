@@ -50,9 +50,10 @@ public sealed class LocalFileWebViewHandler : WebViewHandler
             configuration.SetValueForKey(NSNumber.FromBoolean(true), AllowFileAccessKey);
             configuration.SetValueForKey(NSNumber.FromBoolean(true), AllowUniversalFileAccessKey);
         }
-        catch (NSUnknownKeyException)
+        catch (Exception ex) when (ex.GetType().Name == "NSUnknownKeyException")
         {
-            // The keys were removed by Apple; rely on the platform defaults.
+            // iOS 18+ removed the private keys; swallow the Objective-C NSUnknownKeyException
+            // so TestFlight/App Store builds fall back to the platform defaults without crashing.
         }
     }
 
