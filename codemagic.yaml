@@ -288,7 +288,11 @@ workflows:
             end
 
             def build_token(private_key_pem, key_id, issuer_id)
-              key = OpenSSL::PKey::EC.new(private_key_pem)
+              key = OpenSSL::PKey.read(private_key_pem)
+              unless key.is_a?(OpenSSL::PKey::EC)
+                warn "App Store Connect key must be an EC private key"
+                exit 1
+              end
               header = { alg: 'ES256', kid: key_id, typ: 'JWT' }
               payload = { iss: issuer_id, exp: Time.now.to_i + 20 * 60, aud: 'appstoreconnect-v1' }
               segments = [header, payload].map { |part| Base64.urlsafe_encode64(part.to_json, padding: false) }
