@@ -262,6 +262,7 @@ workflows:
             fi
           done
 
+          set +e
           ruby <<'RUBY'
             require 'openssl'
             require 'base64'
@@ -362,6 +363,11 @@ workflows:
             end
             puts "Cleared #{actionable.length} TestFlight beta review submission(s)."
           RUBY
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then
+            echo "Warning: Unable to auto-clear TestFlight beta review submissions. Continuing without blocking the build."
+          fi
 
     artifacts:
       - output/*.ipa
