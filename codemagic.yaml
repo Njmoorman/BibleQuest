@@ -25,6 +25,7 @@ workflows:
         APP_IDENTIFIER: app.biblequest
         TEAM_ID: 2989BXM365
         VITE_BASE44_REQUIRE_AUTH: "false" # Keep TestFlight builds usable until login UX is ready
+        AUTO_CLEAR_TESTFLIGHT_REVIEW: "true" # Cancel stuck beta-review submissions before Codemagic resubmits
     integrations:
       app_store_connect: CODE MAGIC API - Distribution (Admin)
     triggering:
@@ -243,6 +244,115 @@ workflows:
           mkdir -p output
           find BibleQuestForKids/bin/Release/net8.0-ios/ios-arm64/publish -maxdepth 1 -name '*.ipa' \
             -print -exec cp {} output/ \;
+
+      - name: Clear in-flight TestFlight beta review (optional)
+        script: |
+          set -euo pipefail
+
+          if [ "${AUTO_CLEAR_TESTFLIGHT_REVIEW:-true}" != "true" ]; then
+            echo "AUTO_CLEAR_TESTFLIGHT_REVIEW disabled; keeping existing beta review submission in place."
+            exit 0
+          fi
+
+          required_vars=(APP_STORE_CONNECT_PRIVATE_KEY APP_STORE_CONNECT_KEY_IDENTIFIER APP_STORE_CONNECT_ISSUER_ID APP_IDENTIFIER)
+          for var in "${required_vars[@]}"; do
+            if [ -z "${!var:-}" ]; then
+              echo "Missing required App Store Connect configuration: $var" >&2
+              exit 1
+            fi
+          done
+
+          ruby <<'RUBY'
+            require 'openssl'
+            require 'base64'
+            require 'json'
+            require 'net/http'
+            require 'uri'
+
+            def env!(name)
+              ENV.fetch(name) do
+                warn "Missing required environment variable: #{name}"
+                exit 1
+              end
+            end
+
+            def pad_component(component)
+              bytes = component.to_s(2)
+              if bytes.bytesize < 32
+                ("\x00" * (32 - bytes.bytesize)) + bytes
+              elsif bytes.bytesize > 32
+                bytes[-32, 32]
+              else
+                bytes
+              end
+            end
+
+            def build_token(private_key_pem, key_id, issuer_id)
+              key = OpenSSL::PKey::EC.new(private_key_pem)
+              header = { alg: 'ES256', kid: key_id, typ: 'JWT' }
+              payload = { iss: issuer_id, exp: Time.now.to_i + 20 * 60, aud: 'appstoreconnect-v1' }
+              segments = [header, payload].map { |part| Base64.urlsafe_encode64(part.to_json, padding: false) }
+              signing_input = segments.join('.')
+              digest = OpenSSL::Digest::SHA256.digest(signing_input)
+              der_signature = key.dsa_sign_asn1(digest)
+              asn1 = OpenSSL::ASN1.decode(der_signature)
+              r_bn, s_bn = asn1.value.map(&:value)
+              signature_raw = pad_component(r_bn) + pad_component(s_bn)
+              signature_b64 = Base64.urlsafe_encode64(signature_raw, padding: false)
+              "#{signing_input}.#{signature_b64}"
+            end
+
+            bundle_id = env!('APP_IDENTIFIER')
+            private_key = env!('APP_STORE_CONNECT_PRIVATE_KEY')
+            key_id = env!('APP_STORE_CONNECT_KEY_IDENTIFIER')
+            issuer_id = env!('APP_STORE_CONNECT_ISSUER_ID')
+
+            token = build_token(private_key, key_id, issuer_id)
+
+            api_host = 'https://api.appstoreconnect.apple.com'
+            apps_uri = URI("#{api_host}/v1/apps")
+            apps_uri.query = URI.encode_www_form('filter[bundleId]' => bundle_id, 'include' => 'betaAppReviewSubmissions')
+            apps_req = Net::HTTP::Get.new(apps_uri)
+            apps_req['Authorization'] = "Bearer #{token}"
+
+            apps_res = Net::HTTP.start(apps_uri.host, apps_uri.port, use_ssl: true) { |http| http.request(apps_req) }
+            unless apps_res.is_a?(Net::HTTPSuccess)
+              warn "Failed to query App Store Connect apps: #{apps_res.code} #{apps_res.body}"
+              exit 1
+            end
+
+            payload = JSON.parse(apps_res.body)
+            data = payload.fetch('data', [])
+            if data.empty?
+              warn "No App Store Connect app found for bundle id #{bundle_id}"
+              exit 1
+            end
+
+            review_resources = (payload['included'] || []).select { |resource| resource['type'] == 'betaAppReviewSubmissions' }
+            actionable = review_resources.select do |resource|
+              %w[WAITING_FOR_REVIEW IN_REVIEW].include?(resource.dig('attributes', 'betaReviewState'))
+            end
+
+            if actionable.empty?
+              puts 'No in-flight Beta App Review submissions to cancel.'
+              exit 0
+            end
+
+            actionable.each do |submission|
+              submission_id = submission.fetch('id')
+              state = submission.dig('attributes', 'betaReviewState')
+              puts "Cancelling Beta App Review submission #{submission_id} (state: #{state})"
+              delete_uri = URI("#{api_host}/v1/betaAppReviewSubmissions/#{submission_id}")
+              delete_req = Net::HTTP::Delete.new(delete_uri)
+              delete_req['Authorization'] = "Bearer #{token}"
+              delete_res = Net::HTTP.start(delete_uri.host, delete_uri.port, use_ssl: true) { |http| http.request(delete_req) }
+              unless delete_res.is_a?(Net::HTTPNoContent)
+                warn "Unable to cancel submission #{submission_id}: #{delete_res.code} #{delete_res.body}"
+                exit 1
+              end
+            end
+            puts "Cleared #{actionable.length} TestFlight beta review submission(s)."
+          RUBY
 
     artifacts:
       - output/*.ipa
