@@ -23,6 +23,8 @@ workflows:
         DOTNET_SKIP_FIRST_TIME_EXPERIENCE: "1"
         DOTNET_CLI_TELEMETRY_OPTOUT: "1"
         APP_IDENTIFIER: app.biblequest
+        APP_DISPLAY_VERSION: 1.1.0 # Bump for App Store version 1.1 release track
+        APP_BUILD_NUMBER: 41       # Increment build for new TestFlight upload
         TEAM_ID: 2989BXM365
         VITE_BASE44_REQUIRE_AUTH: "false" # Keep TestFlight builds usable until login UX is ready
         AUTO_CLEAR_TESTFLIGHT_REVIEW: "true" # Cancel stuck beta-review submissions before Codemagic resubmits
