@@ -23,8 +23,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <MauiAsset Include="wwwroot\\dist\\**">
-      <LogicalName>wwwroot/dist/%(RecursiveDir)%(Filename)%(Extension)</LogicalName>
+    <MauiAsset Include="wwwroot\\**"
+               Exclude="wwwroot\\node_modules\\**;wwwroot\\src\\**;wwwroot\\package.json;wwwroot\\package-lock.json;wwwroot\\README.md;wwwroot\\vite.config.js;wwwroot\\tailwind.config.js;wwwroot\\postcss.config.js;wwwroot\\eslint.config.js;wwwroot\\jsconfig.json;wwwroot\\components.json;wwwroot\\index.html">
+      <LogicalName>wwwroot/%(RecursiveDir)%(Filename)%(Extension)</LogicalName>
     </MauiAsset>
   </ItemGroup>
 

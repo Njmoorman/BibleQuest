@@ -61,14 +61,9 @@ workflows:
           npm ci
           npm run build
 
-          # Replace dev-time assets with the production bundle MAUI needs at runtime.
-          rm -rf assets
-          rm -f index.html
-          cp -R dist/* .
-
-          # Strip web build dependencies so wwwroot only contains the shipped bundle.
-          rm -rf dist node_modules src
-          rm -f package.json package-lock.json vite.config.js tailwind.config.js postcss.config.js eslint.config.js
+          # Strip web build dependencies so MAUI only packages the compiled Vite output.
+          rm -rf node_modules src
+          rm -f package.json package-lock.json vite.config.js tailwind.config.js postcss.config.js eslint.config.js jsconfig.json components.json README.md
 
       - name: Restore NuGet packages
         script: |
