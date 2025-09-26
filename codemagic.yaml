@@ -24,7 +24,7 @@ workflows:
         DOTNET_CLI_TELEMETRY_OPTOUT: "1"
         APP_IDENTIFIER: app.biblequest
         APP_DISPLAY_VERSION: 1.1.0 # Bump for App Store version 1.1 release track
-        APP_BUILD_NUMBER: 41       # Increment build for new TestFlight upload
+        APP_BUILD_NUMBER: 41       # Acts as a floor; workflow auto-bumps if App Store Connect already has this build
         TEAM_ID: 2989BXM365
         VITE_BASE44_REQUIRE_AUTH: "false" # Keep TestFlight builds usable until login UX is ready
         AUTO_CLEAR_TESTFLIGHT_REVIEW: "true" # Cancel stuck beta-review submissions before Codemagic resubmits
@@ -188,6 +188,157 @@ workflows:
 
           APP_DISPLAY_VERSION=$(pick_display_version)
           APP_BUILD_NUMBER=$(pick_build_number)
+
+          : "${APP_IDENTIFIER:?Define APP_IDENTIFIER in workflow vars or Codemagic env groups}"
+
+          # Guard against App Store Connect rejecting duplicate CFBundleVersion values when we keep the same marketing version.
+          maybe_raise_build_number() {
+            local missing=0
+            local required_vars=(APP_STORE_CONNECT_PRIVATE_KEY APP_STORE_CONNECT_KEY_IDENTIFIER APP_STORE_CONNECT_ISSUER_ID)
+            for var in "${required_vars[@]}"; do
+              if [ -z "${!var:-}" ]; then
+                missing=1
+              fi
+            done
+
+            if [ "$missing" -ne 0 ]; then
+              echo "App Store Connect credentials not available; keeping requested build number $APP_BUILD_NUMBER."
+              return
+            fi
+
+            local resolved
+            if ! resolved=$(ruby <<'RUBY'
+require 'openssl'
+require 'base64'
+require 'json'
+require 'net/http'
+require 'uri'
+
+def env!(name)
+  value = ENV[name]
+  raise "Missing required environment variable #{name}" if value.nil? || value.empty?
+  value
+end
+
+def normalize_private_key(raw)
+  return raw if raw.include?('-----BEGIN')
+  Base64.decode64(raw)
+end
+
+def build_token(private_key_pem, key_id, issuer_id)
+  key = OpenSSL::PKey.read(private_key_pem)
+  raise 'App Store Connect key must be an EC private key' unless key.is_a?(OpenSSL::PKey::EC)
+
+  header = { alg: 'ES256', kid: key_id, typ: 'JWT' }
+  payload = { iss: issuer_id, exp: Time.now.to_i + 20 * 60, aud: 'appstoreconnect-v1' }
+  segments = [header, payload].map { |part| Base64.urlsafe_encode64(part.to_json, padding: false) }
+  signing_input = segments.join('.')
+  digest = OpenSSL::Digest::SHA256.digest(signing_input)
+  der_signature = key.dsa_sign_asn1(digest)
+  asn1 = OpenSSL::ASN1.decode(der_signature)
+  r_bn, s_bn = asn1.value.map(&:value)
+  pad = ->(component) {
+    hex = component.to_s(16)
+    hex = "0#{hex}" if hex.length.odd?
+    [hex].pack('H*').rjust(32, "\x00")
+  }
+  signature_raw = pad.call(r_bn) + pad.call(s_bn)
+  signature_b64 = Base64.urlsafe_encode64(signature_raw, padding: false)
+  "#{signing_input}.#{signature_b64}"
+end
+
+bundle_id = env!('APP_IDENTIFIER')
+target_version = env!('APP_DISPLAY_VERSION')
+requested_build = ENV.fetch('APP_BUILD_NUMBER', '')
+
+requested_numeric = begin
+  Integer(requested_build)
+rescue ArgumentError, TypeError
+  nil
+end
+
+private_key_pem = normalize_private_key(env!('APP_STORE_CONNECT_PRIVATE_KEY'))
+key_id = env!('APP_STORE_CONNECT_KEY_IDENTIFIER')
+issuer_id = env!('APP_STORE_CONNECT_ISSUER_ID')
+
+token = build_token(private_key_pem, key_id, issuer_id)
+
+api_host = 'https://api.appstoreconnect.apple.com'
+apps_uri = URI("#{api_host}/v1/apps")
+apps_uri.query = URI.encode_www_form('filter[bundleId]' => bundle_id)
+apps_req = Net::HTTP::Get.new(apps_uri)
+apps_req['Authorization'] = "Bearer #{token}"
+
+apps_res = Net::HTTP.start(apps_uri.host, apps_uri.port, use_ssl: true) { |http| http.request(apps_req) }
+unless apps_res.is_a?(Net::HTTPSuccess)
+  warn "Unable to query App Store Connect apps: #{apps_res.code} #{apps_res.body}"
+  puts(requested_numeric || '')
+  exit 0
+end
+
+payload = JSON.parse(apps_res.body)
+app_data = payload.fetch('data', [])
+if app_data.empty?
+  warn "No App Store Connect app found for bundle id #{bundle_id}"
+  puts(requested_numeric || '')
+  exit 0
+end
+
+app_id = app_data.first.fetch('id')
+builds_uri = URI("#{api_host}/v1/builds")
+params = {
+  'filter[app]' => app_id,
+  'sort' => '-buildVersion',
+  'limit' => '10'
+}
+params['filter[preReleaseVersion.version]'] = target_version unless target_version.to_s.empty?
+builds_uri.query = URI.encode_www_form(params)
+
+builds_req = Net::HTTP::Get.new(builds_uri)
+builds_req['Authorization'] = "Bearer #{token}"
+
+builds_res = Net::HTTP.start(builds_uri.host, builds_uri.port, use_ssl: true) { |http| http.request(builds_req) }
+unless builds_res.is_a?(Net::HTTPSuccess)
+  warn "Unable to query App Store Connect builds: #{builds_res.code} #{builds_res.body}"
+  puts(requested_numeric || '')
+  exit 0
+end
+
+builds_payload = JSON.parse(builds_res.body)
+max_remote = builds_payload.fetch('data', []).map do |item|
+  begin
+    Integer(item.dig('attributes', 'buildVersion'))
+  rescue ArgumentError, TypeError
+    nil
+  end
+end.compact.max
+
+recommended = if max_remote
+  if requested_numeric && requested_numeric > max_remote
+    requested_numeric
+  else
+    max_remote + 1
+  end
+else
+  requested_numeric || 1
+end
+
+puts recommended
+RUBY
+); then
+              echo "Warning: Unable to query App Store Connect for existing builds. Continuing with $APP_BUILD_NUMBER."
+              return
+            fi
+            if [ -z "$resolved" ]; then
+              return
+            fi
+            if [ "$resolved" != "$APP_BUILD_NUMBER" ]; then
+              echo "Bumping build number from $APP_BUILD_NUMBER to $resolved to satisfy App Store Connect duplicate build checks."
+              APP_BUILD_NUMBER="$resolved"
+            fi
+          }
+
+          maybe_raise_build_number
 
           echo "Stamping CFBundleShortVersionString=$APP_DISPLAY_VERSION"
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $APP_DISPLAY_VERSION" "$INFO_PLIST"
