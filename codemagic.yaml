@@ -23,8 +23,7 @@ workflows:
         DOTNET_SKIP_FIRST_TIME_EXPERIENCE: "1"
         DOTNET_CLI_TELEMETRY_OPTOUT: "1"
         APP_IDENTIFIER: app.biblequest
-        APP_DISPLAY_VERSION: 1.1.0 # Bump for App Store version 1.1 release track
-        APP_BUILD_NUMBER: 41       # Acts as a floor; workflow auto-bumps if App Store Connect already has this build
+        APP_DISPLAY_VERSION: 1.1.0   # bump manually when you want a new marketing version
         TEAM_ID: 2989BXM365
         VITE_BASE44_REQUIRE_AUTH: "false" # Keep TestFlight builds usable until login UX is ready
         AUTO_CLEAR_TESTFLIGHT_REVIEW: "true" # Cancel stuck beta-review submissions before Codemagic resubmits
@@ -33,11 +32,21 @@ workflows:
     triggering:
       events:
         - push
-        - pull_request   # Catch PR changes before merge to keep TestFlight/App Store ready
+        - pull_request
       branch_patterns:
         - pattern: main
           include: true
     scripts:
+      - name: Auto-increment build number
+        script: |
+          if [ -z "$APP_BUILD_NUMBER" ]; then
+            NEW_BUILD_NUMBER=1
+          else
+            NEW_BUILD_NUMBER=$(($APP_BUILD_NUMBER + 1))
+          fi
+          echo "Using build number: $NEW_BUILD_NUMBER"
+          echo "export APP_BUILD_NUMBER=$NEW_BUILD_NUMBER" >> $CM_ENV
+
       - name: Install .NET SDK locally (no sudo required)
         script: |
           set -euo pipefail
@@ -161,67 +170,8 @@ workflows:
           set -euo pipefail
           INFO_PLIST="BibleQuestForKids/Platforms/iOS/Info.plist"
 
-          pick_display_version() {
-            if [ -n "${APP_VERSION-}" ]; then
-              printf '%s' "$APP_VERSION"; return
-            fi
-            if [ -n "${APP_DISPLAY_VERSION-}" ]; then
-              printf '%s' "$APP_DISPLAY_VERSION"; return
-            fi
-            if [ -n "${CM_TAG-}" ]; then
-              printf '%s' "${CM_TAG#v}"; return
-            fi
-            printf '1.0.0'
-          }
-
-          pick_build_number() {
-            if [ -n "${APP_BUILD_NUMBER-}" ]; then
-              printf '%s' "$APP_BUILD_NUMBER"; return
-            fi
-            if [ -n "${BUILD_NUMBER-}" ]; then
-              printf '%s' "$BUILD_NUMBER"; return
-            fi
-            if [ -n "${CM_BUILD_ID-}" ]; then
-              printf '%s' "$CM_BUILD_ID"; return
-            fi
-            printf '1'
-          }
-
-          APP_DISPLAY_VERSION=$(pick_display_version)
-          APP_BUILD_NUMBER=$(pick_build_number)
-
-          : "${APP_IDENTIFIER:?Define APP_IDENTIFIER in workflow vars or Codemagic env groups}"
-
-          # Guard against App Store Connect rejecting duplicate CFBundleVersion values when we keep the same marketing version.
-          maybe_raise_build_number() {
-            local missing=0
-            local required_vars=(APP_STORE_CONNECT_PRIVATE_KEY APP_STORE_CONNECT_KEY_IDENTIFIER APP_STORE_CONNECT_ISSUER_ID)
-            for var in "${required_vars[@]}"; do
-              if [ -z "${!var:-}" ]; then
-                missing=1
-              fi
-            done
-
-            if [ "$missing" -ne 0 ]; then
-              echo "App Store Connect credentials not available; keeping requested build number $APP_BUILD_NUMBER."
-              return
-            fi
-
-            local resolved
-            if ! resolved=$(ruby ci/scripts/maybe_raise_build_number.rb); then
-              echo "Warning: Unable to query App Store Connect for existing builds. Continuing with $APP_BUILD_NUMBER."
-              return
-            fi
-            if [ -z "$resolved" ]; then
-              return
-            fi
-            if [ "$resolved" != "$APP_BUILD_NUMBER" ]; then
-              echo "Bumping build number from $APP_BUILD_NUMBER to $resolved to satisfy App Store Connect duplicate build checks."
-              APP_BUILD_NUMBER="$resolved"
-            fi
-          }
-
-          maybe_raise_build_number
+          APP_DISPLAY_VERSION=${APP_DISPLAY_VERSION:-1.0.0}
+          APP_BUILD_NUMBER=${APP_BUILD_NUMBER:-1}
 
           echo "Stamping CFBundleShortVersionString=$APP_DISPLAY_VERSION"
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $APP_DISPLAY_VERSION" "$INFO_PLIST"
@@ -244,9 +194,8 @@ workflows:
             echo "Missing $ICONSET" >&2
             exit 1
           fi
-          # Keep validation logic in a standalone script so Base44/Codemagic runs stay readable.
           python3 "$ICONSET/validate_icons.py" "$ICONSET"
-          
+
       - name: Publish .NET MAUI iOS app
         script: |
           set -euo pipefail
@@ -284,12 +233,10 @@ workflows:
       - name: Clear in-flight TestFlight beta review (optional)
         script: |
           set -euo pipefail
-
           if [ "${AUTO_CLEAR_TESTFLIGHT_REVIEW:-true}" != "true" ]; then
             echo "AUTO_CLEAR_TESTFLIGHT_REVIEW disabled; keeping existing beta review submission in place."
             exit 0
           fi
-
           required_vars=(APP_STORE_CONNECT_PRIVATE_KEY APP_STORE_CONNECT_KEY_IDENTIFIER APP_STORE_CONNECT_ISSUER_ID APP_IDENTIFIER)
           for var in "${required_vars[@]}"; do
             if [ -z "${!var:-}" ]; then
@@ -297,7 +244,6 @@ workflows:
               exit 1
             fi
           done
-
           set +e
           ruby ci/scripts/clear_testflight_beta_review.rb
           status=$?
