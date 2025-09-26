@@ -45,10 +45,10 @@ public partial class MainPage : ContentPage
 
         var packageRoot = GetPackageAssetRoot();
         var versionKey = GetVersionStamp();
-        var cacheRoot = Path.Combine(FileSystem.AppDataDirectory, cacheFolderName, versionKey);
+        var cacheRoot = Path.Combine(FileSystem.Current.AppDataDirectory, cacheFolderName, versionKey);
         Directory.CreateDirectory(cacheRoot);
 
-        PruneStaleCaches(Path.Combine(FileSystem.AppDataDirectory, cacheFolderName), versionKey);
+        PruneStaleCaches(Path.Combine(FileSystem.Current.AppDataDirectory, cacheFolderName), versionKey);
 
         // Prefer the production bundle (wwwroot/dist) but fall back to the development
         // root (wwwroot) when running without a compiled build. This mirrors the
@@ -83,7 +83,9 @@ public partial class MainPage : ContentPage
             }
         }
 
-        throw new FileNotFoundException("Unable to locate the bundled web assets.", packageRoot);
+        throw new FileNotFoundException(
+            "Unable to locate the bundled web assets. Run `npm run build` inside BibleQuestForKids/wwwroot before packaging.",
+            packageRoot);
     }
 
     private static string GetVersionStamp()
@@ -100,7 +102,7 @@ public partial class MainPage : ContentPage
         return Path.Combine(NSBundle.MainBundle.BundlePath, "wwwroot");
 #else
         // For Android (and other targets) rely on MAUI's abstraction when available.
-        return Path.Combine(FileSystem.AppPackageDirectory, "wwwroot");
+        return Path.Combine(FileSystem.Current.AppPackageDirectory, "wwwroot");
 #endif
     }
 
