@@ -302,8 +302,13 @@ workflows:
               "#{signing_input}.#{signature_b64}"
             end
 
+            def normalize_private_key(raw)
+              expanded = raw.include?('-----BEGIN') ? raw : Base64.decode64(raw)
+              expanded.gsub("\\n", "\n")
+            end
+
             bundle_id = env!('APP_IDENTIFIER')
-            private_key = env!('APP_STORE_CONNECT_PRIVATE_KEY')
+            private_key = normalize_private_key(env!('APP_STORE_CONNECT_PRIVATE_KEY'))
             key_id = env!('APP_STORE_CONNECT_KEY_IDENTIFIER')
             issuer_id = env!('APP_STORE_CONNECT_ISSUER_ID')
 
