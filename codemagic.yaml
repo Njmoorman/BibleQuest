@@ -27,6 +27,9 @@ workflows:
         TEAM_ID: 2989BXM365
         VITE_BASE44_REQUIRE_AUTH: "false" # Keep TestFlight builds usable until login UX is ready
         AUTO_CLEAR_TESTFLIGHT_REVIEW: "true" # Cancel stuck beta-review submissions before Codemagic resubmits
+        BASELINE_INDEX_HTML_HASH: ""  # TODO: fill with known-good index.html SHA256 before shipping to App Store
+        BASELINE_BLAZOR_BOOT_HASH: "" # TODO: fill with known-good blazor.boot.json SHA256 before locking release builds
+        BASELINE_DOTNET_JS_HASH: ""   # TODO: fill with known-good dotnet.js SHA256
     integrations:
       app_store_connect: CODE MAGIC API - Distribution (Admin)
     triggering:
@@ -77,22 +80,46 @@ workflows:
           rm -f package.json package-lock.json vite.config.js tailwind.config.js postcss.config.js eslint.config.js \
             jsconfig.json components.json README.md
 
-      - name: "Guard: index.html must exist after npm build"
+      - name: Guard: Blazor files exist after npm build
         script: |
           set -euo pipefail
-          if [ ! -f BibleQuestForKids/wwwroot/index.html ]; then
-            echo "index.html missing after npm build cleanup" >&2
+          cd BibleQuestForKids/wwwroot
+
+          REQUIRED_FILES=("index.html" "_framework/blazor.boot.json" "_framework/dotnet.js")
+          BASELINE_HASHES=("${BASELINE_INDEX_HTML_HASH:-}" "${BASELINE_BLAZOR_BOOT_HASH:-}" "${BASELINE_DOTNET_JS_HASH:-}")
+
+          i=0
+          for f in "${REQUIRED_FILES[@]}"; do
+            if [ ! -f "$f" ]; then
+              echo "ERROR: Missing required Blazor file: $f" >&2
+              exit 1
+            fi
+
+            SIZE=$(stat -f%z "$f" 2>/dev/null || stat -c%s "$f")
+            if [ "$SIZE" -eq 0 ]; then
+              echo "ERROR: Blazor file $f exists but is empty!" >&2
+              exit 1
+            fi
+
+            HASH=$(shasum -a 256 "$f" | awk '{print $1}')
+            echo "✅ $f — $SIZE bytes — SHA256: $HASH"
+
+            BASELINE="${BASELINE_HASHES[$i]}"
+            if [ -n "$BASELINE" ] && [ "$HASH" != "$BASELINE" ]; then
+              echo "ERROR: Hash mismatch for $f (expected $BASELINE, got $HASH)" >&2
+              exit 1
+            fi
+
+            i=$((i+1))
+          done
+
+          if ! grep -q "blazor.boot.json" index.html; then
+            echo "ERROR: index.html does not reference blazor.boot.json" >&2
             exit 1
           fi
 
-      - name: Verify bundled web assets are in place
-        script: |
-          set -euo pipefail
-          if [ ! -f BibleQuestForKids/wwwroot/index.html ]; then
-            echo "ERROR: wwwroot/index.html is missing before publish" >&2
-            exit 1
-          fi
-          echo "NOTE: IPA verification runs after publish step."
+          echo "Preview of index.html (first 10 lines):"
+          head -n 10 index.html
 
       - name: Restore NuGet packages
         script: |
@@ -261,15 +288,15 @@ workflows:
           fi
           echo "OK: IPA build number validated."
 
-      - name: Verify IPA has wwwroot/index.html
+      - name: Verify IPA contains Blazor assets
         script: |
           set -euo pipefail
           IPA_PATH=$(find BibleQuestForKids/bin/Release/net8.0-ios/ios-arm64/publish -maxdepth 1 -name '*.ipa' | head -1)
           if [ -z "${IPA_PATH:-}" ]; then
-            echo "ERROR: No IPA found to verify" >&2
+            echo "ERROR: No IPA found" >&2
             exit 1
           fi
-          echo "IPA: $IPA_PATH"
+
           TMP_DIR=$(mktemp -d)
           unzip -q "$IPA_PATH" -d "$TMP_DIR"
           APP_DIR=$(cd "$TMP_DIR/Payload" && ls -d *.app | head -1)
@@ -277,13 +304,54 @@ workflows:
             echo "ERROR: Unable to locate .app directory inside IPA" >&2
             exit 1
           fi
-          echo "APP_DIR: $APP_DIR"
-          if [ ! -f "$TMP_DIR/Payload/$APP_DIR/wwwroot/index.html" ]; then
-            echo "ERROR: IPA missing wwwroot/index.html" >&2
+
+          echo "Listing files under wwwroot/ inside IPA:"
+          find "$TMP_DIR/Payload/$APP_DIR/wwwroot" -type f | sort | head -50
+
+          REQUIRED_FILES=(
+            "$TMP_DIR/Payload/$APP_DIR/wwwroot/index.html"
+            "$TMP_DIR/Payload/$APP_DIR/wwwroot/_framework/blazor.boot.json"
+            "$TMP_DIR/Payload/$APP_DIR/wwwroot/_framework/dotnet.js"
+          )
+          BASELINE_HASHES=("${BASELINE_INDEX_HTML_HASH:-}" "${BASELINE_BLAZOR_BOOT_HASH:-}" "${BASELINE_DOTNET_JS_HASH:-}")
+
+          i=0
+          for f in "${REQUIRED_FILES[@]}"; do
+            if [ ! -f "$f" ]; then
+              echo "ERROR: Missing required Blazor file: $f" >&2
+              exit 1
+            fi
+
+            SIZE=$(stat -f%z "$f" 2>/dev/null || stat -c%s "$f")
+            if [ "$SIZE" -eq 0 ]; then
+              echo "ERROR: Blazor file $f exists but is empty!" >&2
+              exit 1
+            fi
+
+            HASH=$(shasum -a 256 "$f" | awk '{print $1}')
+            echo "✅ $f — $SIZE bytes — SHA256: $HASH"
+
+            BASELINE="${BASELINE_HASHES[$i]}"
+            if [ -n "$BASELINE" ] && [ "$HASH" != "$BASELINE" ]; then
+              echo "ERROR: Hash mismatch for $f inside IPA (expected $BASELINE, got $HASH)" >&2
+              exit 1
+            fi
+
+            i=$((i+1))
+          done
+
+          INDEX_HTML="$TMP_DIR/Payload/$APP_DIR/wwwroot/index.html"
+          if ! grep -q "blazor.boot.json" "$INDEX_HTML"; then
+            echo "ERROR: index.html inside IPA does not reference blazor.boot.json" >&2
             exit 1
           fi
-          echo "OK: Found wwwroot/index.html inside IPA"
-          find "$TMP_DIR/Payload/$APP_DIR/wwwroot" -maxdepth 2 -type f | head -50
+
+          echo "Preview of IPA’s index.html (first 10 lines):"
+          head -n 10 "$INDEX_HTML"
+
+          OUTPUT_DIR="$PWD/output"
+          mkdir -p "$OUTPUT_DIR"
+          (cd "$TMP_DIR/Payload/$APP_DIR" && zip -r "$OUTPUT_DIR/ipa-wwwroot.zip" wwwroot)
 
       - name: Collect IPA
         script: |
@@ -316,6 +384,7 @@ workflows:
 
     artifacts:
       - output/*.ipa
+      - output/ipa-wwwroot.zip
 
     publishing:
       app_store_connect:
