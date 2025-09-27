@@ -1,5 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <!-- Import the Razor SDK so Blazor static web assets are bundled for all targets. -->
+  <Import Project="Sdk.props" Sdk="Microsoft.NET.Sdk.Razor" />
+
   <PropertyGroup>
     <TargetFrameworks>net8.0-ios;net8.0-android</TargetFrameworks>
     <OutputType>Exe</OutputType>
@@ -10,8 +13,7 @@
     <Nullable>enable</Nullable>
     <SupportedOSPlatformVersion>13.0</SupportedOSPlatformVersion>
     <SupportedOrientations>Portrait Landscape</SupportedOrientations>
-    <!-- Force-import the Razor SDK so static web asset targets exist during CI publishes. -->
-    <UsingMicrosoftNETSdkRazor>true</UsingMicrosoftNETSdkRazor>
+    <EnableDefaultStaticWebAssets>true</EnableDefaultStaticWebAssets>
   </PropertyGroup>
 
   <!-- Keep platform identifiers explicit so Codemagic signing always matches. -->
@@ -53,5 +55,7 @@
     <PackageReference Include="Microsoft.Maui.Controls" Version="8.0.*" />
     <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="8.0.*" />
   </ItemGroup>
+
+  <Import Project="Sdk.targets" Sdk="Microsoft.NET.Sdk.Razor" />
 
 </Project>
