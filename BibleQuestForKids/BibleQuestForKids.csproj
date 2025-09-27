@@ -10,11 +10,11 @@
     <Nullable>enable</Nullable>
     <SupportedOSPlatformVersion>13.0</SupportedOSPlatformVersion>
     <SupportedOrientations>Portrait Landscape</SupportedOrientations>
-    <!-- Disable unsupported static web assets pipeline for mobile targets. -->
+    <!-- Disable unsupported static web assets pipeline for mobile targets -->
     <StaticWebAssetsEnabled>false</StaticWebAssetsEnabled>
   </PropertyGroup>
 
-  <!-- Keep platform identifiers explicit so Codemagic signing always matches. -->
+  <!-- Keep platform identifiers explicit so Codemagic signing always matches -->
   <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0-ios'">
     <CFBundleIdentifier>app.biblequest</CFBundleIdentifier>
   </PropertyGroup>
@@ -23,15 +23,14 @@
     <ApplicationId>app.biblequest</ApplicationId>
   </PropertyGroup>
 
-  <!-- Always package the Vite output (dist/) rather than raw sources. -->
+  <!-- Always package the Vite output (dist/) rather than raw sources -->
   <ItemGroup>
-    <!-- Package from dist/, not raw wwwroot -->
     <MauiAsset Include="wwwroot/dist/**"
                LogicalName="wwwroot/%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(TargetFramework)' == 'net8.0-android'">
-    <!-- Generates adaptive/mipmap icons for Android only. iOS ships the curated asset catalog instead. -->
+    <!-- Generates adaptive/mipmap icons for Android only. iOS ships the curated asset catalog instead -->
     <MauiIcon Include="Resources\AppIcon\appicon.svg"
               ForegroundFile="Resources\AppIcon\appiconfg.svg"
               Color="#1B365D" />
@@ -44,7 +43,7 @@
   <Target Name="MaterializeIosAppIcons"
           BeforeTargets="PrepareForBuild"
           Condition="'$(TargetFramework)' == 'net8.0-ios'">
-    <!-- Use the shared Python helper to keep icons in source control as text. -->
+    <!-- Use the shared Python helper to keep icons in source control as text -->
     <Message Text="Materializing iOS AppIcon PNGs from base64 sources." Importance="high" />
     <Exec Command="python3 &quot;$(MSBuildProjectDirectory)/Platforms/iOS/Assets.xcassets/AppIcon.appiconset/materialize_icons.py&quot;" />
   </Target>
@@ -53,5 +52,8 @@
     <PackageReference Include="Microsoft.Maui.Controls" Version="8.0.*" />
     <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="8.0.*" />
   </ItemGroup>
+
+  <!-- Stub out StaticWebAssetsPrepareForRun so iOS builds don’t fail -->
+  <Target Name="StaticWebAssetsPrepareForRun" />
 
 </Project>
