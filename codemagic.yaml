@@ -65,14 +65,33 @@ workflows:
           dotnet workload install maui-ios --skip-manifest-update --temp-dir "$HOME/.dotnet/temp"
           dotnet workload restore BibleQuestForKids/BibleQuestForKids.csproj
 
-      - name: Build bundled web assets (npm)
+      - name: Build bundled web assets (npm + Blazor runtime)
         script: |
           set -euo pipefail
           cd BibleQuestForKids/wwwroot
           npm ci
           npm run build
 
-          # Strip web build dependencies so MAUI only packages the compiled Vite output.
+          # Build Blazor runtime assets so the guard finds blazor.boot.json and dotnet.js.
+          cd ../..
+          dotnet publish BibleQuestForKids/BibleQuestForKids.csproj \
+            -c Release -f net8.0-browserwasm -o blazor-wasm-out
+
+          # Verify Blazor publish produced the expected boot manifest.
+          if [ ! -f blazor-wasm-out/wwwroot/_framework/blazor.boot.json ]; then
+            echo "ERROR: Blazor runtime publish did not produce blazor.boot.json"
+            exit 1
+          fi
+
+          # Merge the runtime payload into Vite's dist/ output for packaging.
+          mkdir -p BibleQuestForKids/wwwroot/dist/_framework
+          cp -r blazor-wasm-out/wwwroot/_framework/* BibleQuestForKids/wwwroot/dist/_framework/
+
+          echo "✅ Merged Blazor runtime into dist/_framework"
+          ls -l BibleQuestForKids/wwwroot/dist/_framework | head -20
+
+          # Strip web build dependencies so MAUI only packages the compiled Vite+Blazor output.
+          cd BibleQuestForKids/wwwroot
           rm -rf node_modules src
           rm -f package.json package-lock.json vite.config.js tailwind.config.js postcss.config.js eslint.config.js \
             jsconfig.json components.json README.md
