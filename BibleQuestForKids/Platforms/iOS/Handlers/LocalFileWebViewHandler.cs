@@ -15,9 +15,6 @@ namespace BibleQuestForKids.Platforms.iOS.Handlers;
 /// </summary>
 public sealed class LocalFileWebViewHandler : WebViewHandler
 {
-    private static readonly NSString AllowFileAccessKey = new("allowFileAccessFromFileURLs");
-    private static readonly NSString AllowUniversalFileAccessKey = new("allowUniversalAccessFromFileURLs");
-
     private static readonly PropertyMapper<IWebView, LocalFileWebViewHandler> LocalMapper = new(WebViewHandler.Mapper);
     private static readonly CommandMapper<IWebView, LocalFileWebViewHandler> LocalCommandMapper = new(WebViewHandler.CommandMapper);
 
@@ -34,27 +31,10 @@ public sealed class LocalFileWebViewHandler : WebViewHandler
 
     protected override WKWebView CreatePlatformView()
     {
-        var configuration = new WKWebViewConfiguration();
-
-        TryEnableLegacyFileSchemeAccess(configuration);
-
-        return new WKWebView(CGRect.Empty, configuration);
-    }
-
-    private static void TryEnableLegacyFileSchemeAccess(WKWebViewConfiguration configuration)
-    {
-        // iOS 18 throws when setting the private allowFileAccess* keys. Swallow the exception so the
-        // app keeps working while continuing to opt-in on older OS releases that still honour them.
-        try
-        {
-            configuration.SetValueForKey(NSNumber.FromBoolean(true), AllowFileAccessKey);
-            configuration.SetValueForKey(NSNumber.FromBoolean(true), AllowUniversalFileAccessKey);
-        }
-        catch (Exception ex) when (ex.GetType().Name == "NSUnknownKeyException")
-        {
-            // iOS 18+ removed the private keys; swallow the Objective-C NSUnknownKeyException
-            // so TestFlight/App Store builds fall back to the platform defaults without crashing.
-        }
+        // Rely on the default configuration. iOS 18 rejects the private allowFileAccess* KVC keys,
+        // and attempting to set them causes an Objective-C abort before .NET can catch it. The
+        // LoadFileUrl call below already grants read access to the bundle resources.
+        return new WKWebView(CGRect.Empty, new WKWebViewConfiguration());
     }
 
     private static void MapSource(LocalFileWebViewHandler handler, IWebView webView)
