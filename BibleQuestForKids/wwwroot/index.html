@@ -15,10 +15,38 @@
       <noscript>Enable JavaScript to load Bible Quest for Kids.</noscript>
     </div>
 
-    <script src="_framework/blazor.webview.js"></script>
+    <script src="/dist/_framework/blazor.webview.js"></script>
     <script>
       (function () {
+        const BLAZOR_RUNTIME_BASE = "/dist/_framework/";
+        const BLAZOR_BOOT_JSON = `${BLAZOR_RUNTIME_BASE}blazor.boot.json`;
+        const DOTNET_JS = `${BLAZOR_RUNTIME_BASE}dotnet.js`;
         const namespace = (window.BibleQuest = window.BibleQuest || {});
+
+        namespace.ensureBlazorRuntime = async () => {
+          if (!namespace._blazorRuntimeProbe) {
+            namespace._blazorRuntimeProbe = (async () => {
+              const bootUrl = new URL(BLAZOR_BOOT_JSON, window.location.href);
+              const dotnetUrl = new URL(DOTNET_JS, window.location.href);
+
+              const bootResponse = await fetch(bootUrl);
+              if (!bootResponse.ok) {
+                throw new Error(
+                  `Blazor boot manifest fetch failed: ${bootResponse.status} ${bootResponse.statusText}`,
+                );
+              }
+
+              await bootResponse.json();
+              await import(dotnetUrl.href);
+              return { bootUrl: bootUrl.href, dotnetUrl: dotnetUrl.href };
+            })().catch((error) => {
+              namespace._blazorRuntimeProbe = null;
+              throw error;
+            });
+          }
+
+          return namespace._blazorRuntimeProbe;
+        };
 
         namespace.loadReactApp = async () => {
           if (namespace._reactLoaded) {
@@ -28,6 +56,7 @@
           const manifestUrl = new URL("./dist/manifest.json", window.location.href);
 
           try {
+            await namespace.ensureBlazorRuntime();
             const manifestResponse = await fetch(manifestUrl);
             if (!manifestResponse.ok) {
               throw new Error(`Manifest fetch failed: ${manifestResponse.status} ${manifestResponse.statusText}`);

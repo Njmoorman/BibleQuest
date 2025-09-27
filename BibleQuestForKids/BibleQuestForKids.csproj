@@ -25,11 +25,15 @@
     <ApplicationId>app.biblequest</ApplicationId>
   </PropertyGroup>
 
-  <!-- Include all Blazor web assets (including index.html), skip node_modules -->
+  <!-- Ship the prebuilt Vite bundle (dist/) alongside the handcrafted host page. -->
   <ItemGroup>
-    <MauiAsset Include="wwwroot/**"
-               Exclude="wwwroot/node_modules/**"
+    <!-- Package dist/ instead of raw wwwroot so the IPA stays lean. -->
+    <MauiAsset Include="wwwroot/dist/**"
                LogicalName="wwwroot/%(RecursiveDir)%(Filename)%(Extension)" />
+
+    <!-- Keep the MAUI host page at the root so BlazorWebView can bootstrap React. -->
+    <MauiAsset Include="wwwroot/index.html"
+               LogicalName="wwwroot/index.html" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(TargetFramework)' == 'net8.0-android'">

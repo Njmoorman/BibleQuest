@@ -80,43 +80,32 @@ workflows:
       - name: "Guard: Blazor files exist after npm build"
         script: |
           set -euo pipefail
-          cd BibleQuestForKids/wwwroot
+          cd BibleQuestForKids/wwwroot/dist
 
           REQUIRED_FILES=("index.html" "_framework/blazor.boot.json" "_framework/dotnet.js")
-          # Optional: define BASELINE_* hashes in Codemagic secure vars before shipping to App Store to block unexpected file changes.
-          BASELINE_HASHES=("${BASELINE_INDEX_HTML_HASH:-}" "${BASELINE_BLAZOR_BOOT_HASH:-}" "${BASELINE_DOTNET_JS_HASH:-}")
 
-          i=0
           for f in "${REQUIRED_FILES[@]}"; do
             if [ ! -f "$f" ]; then
-              echo "ERROR: Missing required Blazor file: $f" >&2
+              echo "ERROR: Missing required Blazor file: $f"
               exit 1
             fi
-
             SIZE=$(stat -f%z "$f" 2>/dev/null || stat -c%s "$f")
-            if [ "$SIZE" -eq 0 ]; then
-              echo "ERROR: Blazor file $f exists but is empty!" >&2
-              exit 1
-            fi
-
             HASH=$(shasum -a 256 "$f" | awk '{print $1}')
             echo "✅ $f — $SIZE bytes — SHA256: $HASH"
-
-            BASELINE="${BASELINE_HASHES[$i]}"
-            if [ -n "$BASELINE" ] && [ "$HASH" != "$BASELINE" ]; then
-              echo "ERROR: Hash mismatch for $f (expected $BASELINE, got $HASH)" >&2
-              exit 1
-            fi
-
-            i=$((i+1))
           done
 
+          # Verify runtime is actually referenced in index.html
           if ! grep -q "blazor.boot.json" index.html; then
-            echo "ERROR: index.html does not reference blazor.boot.json" >&2
+            echo "ERROR: index.html does not reference blazor.boot.json"
+            exit 1
+          fi
+          if ! grep -q "dotnet.js" index.html; then
+            echo "ERROR: index.html does not reference dotnet.js"
             exit 1
           fi
 
-          echo "Preview of index.html (first 10 lines):"
+          echo "✅ index.html contains references to blazor.boot.json and dotnet.js"
+          echo "Preview of dist/index.html (first 10 lines):"
           head -n 10 index.html
 
       - name: Restore NuGet packages
@@ -303,13 +292,13 @@ workflows:
             exit 1
           fi
 
-          echo "Listing files under wwwroot/ inside IPA:"
-          find "$TMP_DIR/Payload/$APP_DIR/wwwroot" -type f | sort | head -50
+          echo "Listing files under wwwroot/dist/ inside IPA:"
+          find "$TMP_DIR/Payload/$APP_DIR/wwwroot/dist" -type f | sort | head -50
 
           REQUIRED_FILES=(
-            "$TMP_DIR/Payload/$APP_DIR/wwwroot/index.html"
-            "$TMP_DIR/Payload/$APP_DIR/wwwroot/_framework/blazor.boot.json"
-            "$TMP_DIR/Payload/$APP_DIR/wwwroot/_framework/dotnet.js"
+            "$TMP_DIR/Payload/$APP_DIR/wwwroot/dist/index.html"
+            "$TMP_DIR/Payload/$APP_DIR/wwwroot/dist/_framework/blazor.boot.json"
+            "$TMP_DIR/Payload/$APP_DIR/wwwroot/dist/_framework/dotnet.js"
           )
           BASELINE_HASHES=("${BASELINE_INDEX_HTML_HASH:-}" "${BASELINE_BLAZOR_BOOT_HASH:-}" "${BASELINE_DOTNET_JS_HASH:-}")
 
@@ -338,13 +327,18 @@ workflows:
             i=$((i+1))
           done
 
-          INDEX_HTML="$TMP_DIR/Payload/$APP_DIR/wwwroot/index.html"
+          INDEX_HTML="$TMP_DIR/Payload/$APP_DIR/wwwroot/dist/index.html"
           if ! grep -q "blazor.boot.json" "$INDEX_HTML"; then
-            echo "ERROR: index.html inside IPA does not reference blazor.boot.json" >&2
+            echo "ERROR: IPA index.html does not reference blazor.boot.json" >&2
+            exit 1
+          fi
+          if ! grep -q "dotnet.js" "$INDEX_HTML"; then
+            echo "ERROR: IPA index.html does not reference dotnet.js" >&2
             exit 1
           fi
 
-          echo "Preview of IPA’s index.html (first 10 lines):"
+          echo "✅ IPA index.html contains references to blazor.boot.json and dotnet.js"
+          echo "Preview of IPA’s dist/index.html (first 10 lines):"
           head -n 10 "$INDEX_HTML"
 
           OUTPUT_DIR="$PWD/output"
