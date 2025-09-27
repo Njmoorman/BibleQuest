@@ -227,8 +227,7 @@ workflows:
             -c Release \
             -f net8.0-ios \
             -p:RuntimeIdentifier=ios-arm64 \
-            -p:ArchiveOnBuild=true \
-            -p:CreatePackage=true \
+            -p:BuildIpa=true \
             -p:ApplicationId="$APP_IDENTIFIER" \
             -p:CFBundleIdentifier="$APP_IDENTIFIER" \
             -p:ApplicationDisplayVersion="$APP_DISPLAY_VERSION" \
