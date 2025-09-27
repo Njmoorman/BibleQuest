@@ -84,6 +84,24 @@ if app_data.empty?
 end
 
 app_id = app_data.first.fetch('id')
+
+def fetch_build_numbers(uri, token)
+  req = Net::HTTP::Get.new(uri)
+  req['Authorization'] = "Bearer #{token}"
+
+  res = Net::HTTP.start(uri.host, uri.port, use_ssl: true) { |http| http.request(req) }
+  return nil unless res.is_a?(Net::HTTPSuccess)
+
+  payload = JSON.parse(res.body)
+  payload.fetch('data', []).map do |item|
+    begin
+      Integer(item.dig('attributes', 'buildVersion'))
+    rescue ArgumentError, TypeError
+      nil
+    end
+  end.compact
+end
+
 builds_uri = URI("#{api_host}/v1/builds")
 params = {
   'filter[app]' => app_id,
@@ -93,24 +111,28 @@ params = {
 params['filter[preReleaseVersion.version]'] = target_version unless target_version.to_s.empty?
 builds_uri.query = URI.encode_www_form(params)
 
-builds_req = Net::HTTP::Get.new(builds_uri)
-builds_req['Authorization'] = "Bearer #{token}"
+build_numbers = fetch_build_numbers(builds_uri, token)
 
-builds_res = Net::HTTP.start(builds_uri.host, builds_uri.port, use_ssl: true) { |http| http.request(builds_req) }
-unless builds_res.is_a?(Net::HTTPSuccess)
-  warn "Unable to query App Store Connect builds: #{builds_res.code} #{builds_res.body}"
+if build_numbers.nil?
+  warn "Unable to query App Store Connect builds: request failed"
   puts(requested_numeric || '')
   exit 0
 end
 
-builds_payload = JSON.parse(builds_res.body)
-max_remote = builds_payload.fetch('data', []).map do |item|
-  begin
-    Integer(item.dig('attributes', 'buildVersion'))
-  rescue ArgumentError, TypeError
-    nil
-  end
-end.compact.max
+if build_numbers.empty? && !target_version.to_s.empty?
+  warn 'No existing builds found for target marketing version; falling back to global max'
+  fallback_uri = URI("#{api_host}/v1/builds")
+  fallback_params = {
+    'filter[app]' => app_id,
+    'sort' => '-buildVersion',
+    'limit' => '10'
+  }
+  fallback_uri.query = URI.encode_www_form(fallback_params)
+  fallback_numbers = fetch_build_numbers(fallback_uri, token)
+  build_numbers = fallback_numbers if fallback_numbers&.any?
+end
+
+max_remote = build_numbers&.max
 
 recommended = if max_remote
   if requested_numeric && requested_numeric > max_remote
