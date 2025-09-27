@@ -68,6 +68,8 @@ workflows:
       - name: Build bundled web assets (npm + Blazor runtime)
         script: |
           set -euo pipefail
+          # Ensure dotnet CLI is usable even inside Codemagic subshells.
+          export PATH="$DOTNET_ROOT:$PATH"
           cd BibleQuestForKids/wwwroot
           npm ci
           npm run build
