@@ -76,10 +76,11 @@ workflows:
           npm ci
           npm run build
 
-          # Build Blazor runtime assets so the guard finds blazor.boot.json and dotnet.js.
+          # Build a minimal Blazor WebAssembly runtime payload. The MAUI project itself
+          # cannot target browser-wasm, so we publish the stub in ci/blazor-runtime/.
           cd ../..
-          dotnet publish BibleQuestForKids/BibleQuestForKids.csproj \
-            -c Release -f net8.0-browserwasm -o blazor-wasm-out
+          dotnet publish ci/blazor-runtime/BlazorRuntimeStub.csproj \
+            -c Release -f net8.0 -r browser-wasm -o blazor-wasm-out
 
           # Verify Blazor publish produced the expected boot manifest.
           if [ ! -f blazor-wasm-out/wwwroot/_framework/blazor.boot.json ]; then
