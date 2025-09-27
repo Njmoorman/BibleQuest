@@ -27,9 +27,6 @@ workflows:
         TEAM_ID: 2989BXM365
         VITE_BASE44_REQUIRE_AUTH: "false" # Keep TestFlight builds usable until login UX is ready
         AUTO_CLEAR_TESTFLIGHT_REVIEW: "true" # Cancel stuck beta-review submissions before Codemagic resubmits
-        BASELINE_INDEX_HTML_HASH: ""  # TODO: fill with known-good index.html SHA256 before shipping to App Store
-        BASELINE_BLAZOR_BOOT_HASH: "" # TODO: fill with known-good blazor.boot.json SHA256 before locking release builds
-        BASELINE_DOTNET_JS_HASH: ""   # TODO: fill with known-good dotnet.js SHA256
     integrations:
       app_store_connect: CODE MAGIC API - Distribution (Admin)
     triggering:
@@ -86,6 +83,7 @@ workflows:
           cd BibleQuestForKids/wwwroot
 
           REQUIRED_FILES=("index.html" "_framework/blazor.boot.json" "_framework/dotnet.js")
+          # Optional: define BASELINE_* hashes in Codemagic secure vars before shipping to App Store to block unexpected file changes.
           BASELINE_HASHES=("${BASELINE_INDEX_HTML_HASH:-}" "${BASELINE_BLAZOR_BOOT_HASH:-}" "${BASELINE_DOTNET_JS_HASH:-}")
 
           i=0
