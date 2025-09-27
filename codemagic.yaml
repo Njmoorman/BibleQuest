@@ -43,7 +43,8 @@ workflows:
           # Use epoch seconds so CFBundleVersion monotonically increases for TestFlight/App Store
           EPOCH_BUILD_NUMBER="$(date +%s)"
           echo "Using APP_BUILD_NUMBER=$EPOCH_BUILD_NUMBER"
-          echo "export APP_BUILD_NUMBER=$EPOCH_BUILD_NUMBER" >> "$CM_ENV"
+          # Persist for downstream steps by writing directly to Codemagic's shared env file.
+          echo "APP_BUILD_NUMBER=$EPOCH_BUILD_NUMBER" >> "$CM_ENV"
 
       - name: Install .NET SDK locally (no sudo required)
         script: |
