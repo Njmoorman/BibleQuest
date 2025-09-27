@@ -37,19 +37,25 @@ workflows:
         - pattern: main
           include: true
     scripts:
-      - name: Auto-increment build number
+      - name: Resolve build number
         script: |
           set -euo pipefail
 
-          CURRENT_BUILD_NUMBER=${APP_BUILD_NUMBER:-}
-          if [ -z "$CURRENT_BUILD_NUMBER" ]; then
-            NEW_BUILD_NUMBER=1
-          else
-            NEW_BUILD_NUMBER=$((CURRENT_BUILD_NUMBER + 1))
+          echo "Resolving next build number (checks App Store Connect for latest)..."
+          NEXT_BUILD=$(ruby ci/scripts/maybe_raise_build_number.rb || true)
+
+          if [[ -z "${NEXT_BUILD// }" ]]; then
+            echo "WARNING: Unable to determine build number automatically; defaulting to 1." >&2
+            NEXT_BUILD=1
           fi
 
-          echo "Using build number: $NEW_BUILD_NUMBER"
-          echo "export APP_BUILD_NUMBER=$NEW_BUILD_NUMBER" >> "$CM_ENV"
+          if ! [[ "$NEXT_BUILD" =~ ^[0-9]+$ ]]; then
+            echo "ERROR: Invalid build number resolved: $NEXT_BUILD" >&2
+            exit 1
+          fi
+
+          echo "Using build number: $NEXT_BUILD"
+          echo "export APP_BUILD_NUMBER=$NEXT_BUILD" >> "$CM_ENV"
 
       - name: Install .NET SDK locally (no sudo required)
         script: |
