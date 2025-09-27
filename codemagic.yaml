@@ -82,7 +82,7 @@ workflows:
           rm -f package.json package-lock.json vite.config.js tailwind.config.js postcss.config.js eslint.config.js \
             jsconfig.json components.json README.md
 
-      - name: Guard: index.html must exist after npm build
+      - name: "Guard: index.html must exist after npm build"
         script: |
           set -euo pipefail
           if [ ! -f BibleQuestForKids/wwwroot/index.html ]; then
