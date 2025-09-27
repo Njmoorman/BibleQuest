@@ -55,7 +55,7 @@ workflows:
           chmod +x /tmp/dotnet-install.sh
           /tmp/dotnet-install.sh --version "$DOTNET_VERSION" --install-dir "$DOTNET_ROOT"
           export PATH="$DOTNET_ROOT:$PATH"
-          dotnet --info
+          "$DOTNET_ROOT/dotnet" --info
 
       - name: Install MAUI & WASM workloads
         script: |
@@ -63,9 +63,9 @@ workflows:
           export PATH="$DOTNET_ROOT:$PATH"
           mkdir -p "$HOME/.dotnet/temp"
           # MAUI for iOS + Blazor hybrid uses the MAUI tooling and the WebAssembly toolchain.
-          dotnet workload install maui-ios --skip-manifest-update --temp-dir "$HOME/.dotnet/temp"
-          dotnet workload install wasm-tools --skip-manifest-update --temp-dir "$HOME/.dotnet/temp"
-          dotnet workload restore BibleQuestForKids/BibleQuestForKids.csproj
+          "$DOTNET_ROOT/dotnet" workload install maui-ios --skip-manifest-update --temp-dir "$HOME/.dotnet/temp"
+          "$DOTNET_ROOT/dotnet" workload install wasm-tools --skip-manifest-update --temp-dir "$HOME/.dotnet/temp"
+          "$DOTNET_ROOT/dotnet" workload restore BibleQuestForKids/BibleQuestForKids.csproj
 
       - name: Build bundled web assets (npm + Blazor runtime)
         script: |
@@ -79,7 +79,7 @@ workflows:
           # Build a minimal Blazor WebAssembly runtime payload. The MAUI project itself
           # cannot target browser-wasm, so we publish the stub in ci/blazor-runtime/.
           cd ../..
-          dotnet publish ci/blazor-runtime/BlazorRuntimeStub.csproj \
+          "$DOTNET_ROOT/dotnet" publish ci/blazor-runtime/BlazorRuntimeStub.csproj \
             -c Release -f net8.0 -r browser-wasm -o blazor-wasm-out
 
           # Verify Blazor publish produced the expected boot manifest.
@@ -136,7 +136,7 @@ workflows:
         script: |
           set -euo pipefail
           export PATH="$DOTNET_ROOT:$PATH"
-          dotnet restore BibleQuestForKids/BibleQuestForKids.csproj
+          "$DOTNET_ROOT/dotnet" restore BibleQuestForKids/BibleQuestForKids.csproj
 
       - name: Configure Apple signing assets
         script: |
@@ -262,7 +262,7 @@ workflows:
           : "${APP_DISPLAY_VERSION:?Stamp Info.plist version numbers before publishing}"
           : "${APP_BUILD_NUMBER:?Stamp Info.plist version numbers before publishing}"
           export PATH="$DOTNET_ROOT:$PATH"
-          dotnet publish BibleQuestForKids/BibleQuestForKids.csproj \
+          "$DOTNET_ROOT/dotnet" publish BibleQuestForKids/BibleQuestForKids.csproj \
             -c Release \
             -f net8.0-ios \
             -p:RuntimeIdentifier=ios-arm64 \
