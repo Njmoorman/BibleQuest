@@ -10,6 +10,8 @@
     <Nullable>enable</Nullable>
     <SupportedOSPlatformVersion>13.0</SupportedOSPlatformVersion>
     <SupportedOrientations>Portrait Landscape</SupportedOrientations>
+    <!-- Force-import the Razor SDK so static web asset targets exist during CI publishes. -->
+    <UsingMicrosoftNETSdkRazor>true</UsingMicrosoftNETSdkRazor>
   </PropertyGroup>
 
   <!-- Keep platform identifiers explicit so Codemagic signing always matches. -->
