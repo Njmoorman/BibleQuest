@@ -80,7 +80,7 @@ workflows:
           rm -f package.json package-lock.json vite.config.js tailwind.config.js postcss.config.js eslint.config.js \
             jsconfig.json components.json README.md
 
-      - name: Guard: Blazor files exist after npm build
+      - name: "Guard: Blazor files exist after npm build"
         script: |
           set -euo pipefail
           cd BibleQuestForKids/wwwroot
