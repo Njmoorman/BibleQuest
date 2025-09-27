@@ -1,13 +1,68 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
   <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="https://base44.com/logo_v2.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Base44 APP</title>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <title>Bible Quest for Kids</title>
+    <base href="/" />
   </head>
   <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
+    <div class="status-bar-safe-area"></div>
+    <div id="app">
+      <noscript>Enable JavaScript to load Bible Quest for Kids.</noscript>
+    </div>
+
+    <script src="_framework/blazor.webview.js"></script>
+    <script>
+      (function () {
+        const namespace = (window.BibleQuest = window.BibleQuest || {});
+
+        namespace.loadReactApp = async () => {
+          if (namespace._reactLoaded) {
+            return;
+          }
+
+          const manifestUrl = new URL("./dist/manifest.json", window.location.href);
+
+          try {
+            const manifestResponse = await fetch(manifestUrl);
+            if (!manifestResponse.ok) {
+              throw new Error(`Manifest fetch failed: ${manifestResponse.status} ${manifestResponse.statusText}`);
+            }
+
+            const manifest = await manifestResponse.json();
+            const manifestValues = Object.values(manifest ?? {});
+            const entry = manifest["src/main.jsx"] ?? manifestValues.find((item) => item && item.isEntry);
+            if (!entry) {
+              throw new Error("Unable to locate the React entry in dist/manifest.json.");
+            }
+
+            const ensureStylesheet = (relativePath) => {
+              const href = new URL(`./dist/${relativePath}`, manifestUrl).href;
+              if (document.querySelector(`link[data-react-bundle='${href}']`)) {
+                return;
+              }
+
+              const link = document.createElement("link");
+              link.rel = "stylesheet";
+              link.href = href;
+              link.dataset.reactBundle = href;
+              document.head.appendChild(link);
+            };
+
+            (entry.css ?? []).forEach((cssFile) => ensureStylesheet(cssFile));
+
+            const bundleUrl = new URL(`./dist/${entry.file}`, manifestUrl);
+            await import(bundleUrl.href);
+            namespace._reactLoaded = true;
+          } catch (error) {
+            console.error("BibleQuest: unable to bootstrap the React bundle.", error);
+          }
+        };
+      })();
+    </script>
   </body>
 </html>

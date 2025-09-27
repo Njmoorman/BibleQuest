@@ -1,0 +1,28 @@
+@using Microsoft.JSInterop
+@inject IJSRuntime JsRuntime
+
+<div id="root"></div>
+
+@code {
+    private bool _initialized;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || _initialized)
+        {
+            return;
+        }
+
+        try
+        {
+            await JsRuntime.InvokeVoidAsync("BibleQuest.loadReactApp");
+            _initialized = true;
+        }
+        catch (JSException ex)
+        {
+            // Surface bootstrap failures in the MAUI logs to help diagnose TestFlight/App Store builds.
+            Console.Error.WriteLine($"BibleQuest React bootstrap failed: {ex.Message}");
+            throw;
+        }
+    }
+}
