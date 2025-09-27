@@ -57,12 +57,14 @@ workflows:
           export PATH="$DOTNET_ROOT:$PATH"
           dotnet --info
 
-      - name: Install MAUI workload
+      - name: Install MAUI & WASM workloads
         script: |
           set -euo pipefail
           export PATH="$DOTNET_ROOT:$PATH"
           mkdir -p "$HOME/.dotnet/temp"
+          # MAUI for iOS + Blazor hybrid uses the MAUI tooling and the WebAssembly toolchain.
           dotnet workload install maui-ios --skip-manifest-update --temp-dir "$HOME/.dotnet/temp"
+          dotnet workload install wasm-tools --skip-manifest-update --temp-dir "$HOME/.dotnet/temp"
           dotnet workload restore BibleQuestForKids/BibleQuestForKids.csproj
 
       - name: Build bundled web assets (npm + Blazor runtime)
