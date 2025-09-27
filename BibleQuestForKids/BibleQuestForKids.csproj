@@ -62,4 +62,8 @@
     <Message Text="⚠️ StaticWebAssetsPrepareForPublish was invoked but is stubbed (dist/ must be packaged manually)." Importance="high" />
   </Target>
 
+  <Target Name="LoadStaticWebAssetsPublishManifest">
+    <Message Text="⚠️ LoadStaticWebAssetsPublishManifest was invoked but is stubbed (dist/ must be packaged manually)." Importance="high" />
+  </Target>
+
 </Project>
