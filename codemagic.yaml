@@ -39,13 +39,17 @@ workflows:
     scripts:
       - name: Auto-increment build number
         script: |
-          if [ -z "$APP_BUILD_NUMBER" ]; then
+          set -euo pipefail
+
+          CURRENT_BUILD_NUMBER=${APP_BUILD_NUMBER:-}
+          if [ -z "$CURRENT_BUILD_NUMBER" ]; then
             NEW_BUILD_NUMBER=1
           else
-            NEW_BUILD_NUMBER=$(($APP_BUILD_NUMBER + 1))
+            NEW_BUILD_NUMBER=$((CURRENT_BUILD_NUMBER + 1))
           fi
+
           echo "Using build number: $NEW_BUILD_NUMBER"
-          echo "export APP_BUILD_NUMBER=$NEW_BUILD_NUMBER" >> $CM_ENV
+          echo "export APP_BUILD_NUMBER=$NEW_BUILD_NUMBER" >> "$CM_ENV"
 
       - name: Install .NET SDK locally (no sudo required)
         script: |
@@ -77,6 +81,23 @@ workflows:
           rm -rf node_modules src
           rm -f package.json package-lock.json vite.config.js tailwind.config.js postcss.config.js eslint.config.js \
             jsconfig.json components.json README.md
+
+      - name: Guard: index.html must exist after npm build
+        script: |
+          set -euo pipefail
+          if [ ! -f BibleQuestForKids/wwwroot/index.html ]; then
+            echo "index.html missing after npm build cleanup" >&2
+            exit 1
+          fi
+
+      - name: Verify bundled web assets are in place
+        script: |
+          set -euo pipefail
+          if [ ! -f BibleQuestForKids/wwwroot/index.html ]; then
+            echo "ERROR: wwwroot/index.html is missing before publish" >&2
+            exit 1
+          fi
+          echo "NOTE: IPA verification runs after publish step."
 
       - name: Restore NuGet packages
         script: |
@@ -223,6 +244,30 @@ workflows:
             -p:CodesignProvision="$PROVISIONING_PROFILE_UUID" \
             -p:CodesignKeychain="$SIGNING_KEYCHAIN_PATH"
 
+      - name: Verify IPA has wwwroot/index.html
+        script: |
+          set -euo pipefail
+          IPA_PATH=$(find BibleQuestForKids/bin/Release/net8.0-ios/ios-arm64/publish -maxdepth 1 -name '*.ipa' | head -1)
+          if [ -z "${IPA_PATH:-}" ]; then
+            echo "ERROR: No IPA found to verify" >&2
+            exit 1
+          fi
+          echo "IPA: $IPA_PATH"
+          TMP_DIR=$(mktemp -d)
+          unzip -q "$IPA_PATH" -d "$TMP_DIR"
+          APP_DIR=$(cd "$TMP_DIR/Payload" && ls -d *.app | head -1)
+          if [ -z "${APP_DIR:-}" ]; then
+            echo "ERROR: Unable to locate .app directory inside IPA" >&2
+            exit 1
+          fi
+          echo "APP_DIR: $APP_DIR"
+          if [ ! -f "$TMP_DIR/Payload/$APP_DIR/wwwroot/index.html" ]; then
+            echo "ERROR: IPA missing wwwroot/index.html" >&2
+            exit 1
+          fi
+          echo "OK: Found wwwroot/index.html inside IPA"
+          find "$TMP_DIR/Payload/$APP_DIR/wwwroot" -maxdepth 2 -type f | head -50
+
       - name: Collect IPA
         script: |
           set -euo pipefail
@@ -260,3 +305,4 @@ workflows:
         auth: integration
         submit_to_testflight: true
         submit_to_app_store: false
+
