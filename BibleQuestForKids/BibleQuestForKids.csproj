@@ -54,4 +54,13 @@
     <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="8.0.*" />
   </ItemGroup>
 
+  <!-- 🚑 Stub unsupported StaticWebAssets targets so mobile builds log a warning instead of failing. -->
+  <Target Name="StaticWebAssetsPrepareForRun">
+    <Message Text="⚠️ StaticWebAssetsPrepareForRun invoked — dist/ must already contain packaged assets." Importance="high" />
+  </Target>
+
+  <Target Name="StaticWebAssetsPrepareForPublish">
+    <Message Text="⚠️ StaticWebAssetsPrepareForPublish invoked — dist/ must already contain packaged assets." Importance="high" />
+  </Target>
+
 </Project>
