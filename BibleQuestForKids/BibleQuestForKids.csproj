@@ -23,8 +23,8 @@
 
   <!-- Include all Blazor web assets (including index.html), skip node_modules -->
   <ItemGroup>
-    <MauiAsset Include="wwwroot\**"
-               Exclude="wwwroot\node_modules\**"
+    <MauiAsset Include="wwwroot/**"
+               Exclude="wwwroot/node_modules/**"
                LogicalName="wwwroot/%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 
