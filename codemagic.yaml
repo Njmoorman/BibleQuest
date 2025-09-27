@@ -70,29 +70,26 @@ workflows:
       - name: Build bundled web assets (npm + Blazor runtime)
         script: |
           set -euo pipefail
-          # Ensure dotnet CLI is usable even inside Codemagic subshells.
           export PATH="$DOTNET_ROOT:$PATH"
+
           cd BibleQuestForKids/wwwroot
           npm ci
           npm run build
-
-          # Build a minimal Blazor WebAssembly runtime payload. The MAUI project itself
-          # cannot target browser-wasm, so we publish the stub in ci/blazor-runtime/.
           cd ../..
-          "$DOTNET_ROOT/dotnet" publish ci/blazor-runtime/BlazorRuntimeStub.csproj \
-            -c Release -f net8.0 -r browser-wasm -o blazor-wasm-out
 
-          # Verify Blazor publish produced the expected boot manifest.
+          # Publish headless Blazor runtime project
+          dotnet publish ci/blazor-runtime/BlazorRuntimeStub.csproj \
+            -c Release -o blazor-wasm-out
+
           if [ ! -f blazor-wasm-out/wwwroot/_framework/blazor.boot.json ]; then
-            echo "ERROR: Blazor runtime publish did not produce blazor.boot.json"
+            echo "ERROR: blazor.boot.json missing in Blazor runtime output"
             exit 1
           fi
 
-          # Merge the runtime payload into Vite's dist/ output for packaging.
           mkdir -p BibleQuestForKids/wwwroot/dist/_framework
           cp -r blazor-wasm-out/wwwroot/_framework/* BibleQuestForKids/wwwroot/dist/_framework/
 
-          echo "✅ Merged Blazor runtime into dist/_framework"
+          echo "✅ Blazor runtime merged into dist/_framework"
           ls -l BibleQuestForKids/wwwroot/dist/_framework | head -20
 
           # Strip web build dependencies so MAUI only packages the compiled Vite+Blazor output.
