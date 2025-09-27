@@ -53,7 +53,13 @@
     <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="8.0.*" />
   </ItemGroup>
 
-  <!-- Stub out StaticWebAssetsPrepareForRun so iOS builds don’t fail -->
-  <Target Name="StaticWebAssetsPrepareForRun" />
+  <!-- Stub unsupported StaticWebAssets targets (mobile platforms don’t run the ASP.NET pipeline) -->
+  <Target Name="StaticWebAssetsPrepareForRun">
+    <Message Text="⚠️ StaticWebAssetsPrepareForRun was invoked but is stubbed (dist/ must be packaged manually)." Importance="high" />
+  </Target>
+
+  <Target Name="StaticWebAssetsPrepareForPublish">
+    <Message Text="⚠️ StaticWebAssetsPrepareForPublish was invoked but is stubbed (dist/ must be packaged manually)." Importance="high" />
+  </Target>
 
 </Project>

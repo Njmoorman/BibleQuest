@@ -129,6 +129,27 @@ workflows:
           echo "Preview of dist/index.html (first 10 lines):"
           head -n 10 index.html
 
+      - name: "Guard: dist/ packaged correctly"
+        script: |
+          set -euo pipefail
+          DIST_DIR="BibleQuestForKids/wwwroot/dist"
+
+          REQUIRED_FILES=(
+            "$DIST_DIR/index.html"
+            "$DIST_DIR/_framework/blazor.boot.json"
+            "$DIST_DIR/_framework/dotnet.js"
+          )
+
+          for f in "${REQUIRED_FILES[@]}"; do
+            if [ ! -f "$f" ]; then
+              echo "ERROR: Missing required Blazor file: $f"
+              exit 1
+            fi
+          done
+
+          echo "✅ dist/ packaging verified"
+          ls -R "$DIST_DIR" | head -40
+
       - name: Restore NuGet packages
         script: |
           set -euo pipefail
