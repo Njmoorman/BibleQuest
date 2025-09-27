@@ -66,4 +66,8 @@
     <Message Text="⚠️ LoadStaticWebAssetsPublishManifest was invoked but is stubbed (dist/ must be packaged manually)." Importance="high" />
   </Target>
 
+  <Target Name="ComputeStaticWebAssetsTargetPaths">
+    <Message Text="⚠️ ComputeStaticWebAssetsTargetPaths was invoked but is stubbed (dist/ must be packaged manually)." Importance="high" />
+  </Target>
+
 </Project>
