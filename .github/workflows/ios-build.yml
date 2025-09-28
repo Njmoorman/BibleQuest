@@ -52,8 +52,11 @@ jobs:
           # List all sources for verification
           dotnet nuget list source
 
+      - name: List repo files for debugging
+        run: ls -R
+
       - name: Restore NuGet packages
-        run: dotnet restore BibleQuestForKids/BibleQuestForKids.sln --no-cache --disable-parallel --verbosity detailed
+        run: dotnet restore BibleQuestForKids/BibleQuestForKids.csproj --no-cache --disable-parallel --verbosity detailed
 
       - name: Build bundled web assets
         working-directory: BibleQuestForKids/wwwroot
