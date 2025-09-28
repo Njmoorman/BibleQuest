@@ -16,11 +16,38 @@ workflows:
         APP_DISPLAY_VERSION: 1.1.0 # Keep in sync with App Store metadata before submissions
         TEAM_ID: 2989BXM365
     scripts:
-      - name: "Compute build number (epoch)"
+      - name: "Resolve build number (epoch seed + App Store Connect guard)"
         script: |
           set -euo pipefail
+
+          # Always seed with epoch seconds so TestFlight builds stay unique even without ASC access.
           EPOCH_BUILD_NUMBER="$(date +%s)"
-          echo "APP_BUILD_NUMBER=$EPOCH_BUILD_NUMBER" >> "$CM_ENV"
+          echo "Seeded APP_BUILD_NUMBER=$EPOCH_BUILD_NUMBER from epoch seconds"
+
+          FINAL_BUILD_NUMBER="$EPOCH_BUILD_NUMBER"
+
+          if [ -n "${APP_STORE_CONNECT_PRIVATE_KEY:-}" ] && \
+             [ -n "${APP_STORE_CONNECT_KEY_IDENTIFIER:-}" ] && \
+             [ -n "${APP_STORE_CONNECT_ISSUER_ID:-}" ]; then
+            echo "Checking App Store Connect for the next safe build number"
+            FINAL_BUILD_NUMBER="$(APP_BUILD_NUMBER="$EPOCH_BUILD_NUMBER" \
+              APP_DISPLAY_VERSION="$APP_DISPLAY_VERSION" \
+              APP_IDENTIFIER="$APP_IDENTIFIER" \
+              APP_STORE_CONNECT_PRIVATE_KEY="$APP_STORE_CONNECT_PRIVATE_KEY" \
+              APP_STORE_CONNECT_KEY_IDENTIFIER="$APP_STORE_CONNECT_KEY_IDENTIFIER" \
+              APP_STORE_CONNECT_ISSUER_ID="$APP_STORE_CONNECT_ISSUER_ID" \
+              ruby ci/scripts/maybe_raise_build_number.rb)"
+          else
+            echo "App Store Connect credentials missing: using epoch build number."
+          fi
+
+          if [ -z "$FINAL_BUILD_NUMBER" ]; then
+            echo "ERROR: Final build number was empty after resolution." >&2
+            exit 1
+          fi
+
+          echo "APP_BUILD_NUMBER=$FINAL_BUILD_NUMBER" >> "$CM_ENV"
+          echo "Pinned APP_BUILD_NUMBER=$FINAL_BUILD_NUMBER (Reminder: marketing version changes require resetting build number for App Store submissions)."
 
       - name: "Install .NET SDK locally"
         script: |
@@ -126,6 +153,53 @@ workflows:
         script: |
           mkdir -p output
           find BibleQuestForKids/bin/Release/net8.0-ios/ios-arm64/publish -name '*.ipa' -exec cp {} output/ \;
+
+      - name: "Prepare App Store Connect API key"
+        script: |
+          set -euo pipefail
+
+          for VAR_NAME in APP_STORE_CONNECT_PRIVATE_KEY APP_STORE_CONNECT_KEY_IDENTIFIER APP_STORE_CONNECT_ISSUER_ID; do
+            if [ -z "${!VAR_NAME:-}" ]; then
+              echo "ERROR: $VAR_NAME is required to upload to TestFlight/App Store." >&2
+              echo "Store the secret in the Codemagic appstore_credentials group." >&2
+              exit 1
+            fi
+          done
+
+          KEY_DIR="$HOME/.appstoreconnect/private_keys"
+          mkdir -p "$KEY_DIR"
+          KEY_PATH="$KEY_DIR/AuthKey_${APP_STORE_CONNECT_KEY_IDENTIFIER}.p8"
+
+          if printf '%s' "$APP_STORE_CONNECT_PRIVATE_KEY" | grep -q 'BEGIN'; then
+            printf '%s\n' "$APP_STORE_CONNECT_PRIVATE_KEY" > "$KEY_PATH"
+          else
+            printf '%s' "$APP_STORE_CONNECT_PRIVATE_KEY" | base64 --decode > "$KEY_PATH"
+          fi
+
+          chmod 600 "$KEY_PATH"
+          echo "Prepared App Store Connect API key at $KEY_PATH"
+
+      - name: "Clear pending TestFlight beta reviews before upload"
+        script: |
+          set -euo pipefail
+          echo "Reminder: cancelling beta review keeps TestFlight builds separate from App Store submissions."
+          ruby ci/scripts/clear_testflight_beta_review.rb
+
+      - name: "Upload IPA to TestFlight"
+        script: |
+          set -euo pipefail
+          IPA_PATH=$(find output -name '*.ipa' | head -1)
+          if [ -z "$IPA_PATH" ]; then
+            echo "ERROR: No IPA found to upload." >&2
+            exit 1
+          fi
+
+          echo "Uploading $IPA_PATH to TestFlight via Transporter (this does not submit to App Store review)."
+          xcrun altool --upload-app \
+            --file "$IPA_PATH" \
+            --type ios \
+            --apiKey "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
+            --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID"
 
     artifacts:
       - output/*.ipa
