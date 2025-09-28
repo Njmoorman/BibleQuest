@@ -114,7 +114,7 @@ workflows:
           rm -f package.json package-lock.json vite.config.js tailwind.config.js postcss.config.js eslint.config.js \
             jsconfig.json components.json README.md
 
-      - name: Patch index.html for Blazor Hybrid
+      - name: Normalize index.html for Blazor Hybrid
         script: |
           set -euo pipefail
           INDEX_FILE="BibleQuestForKids/wwwroot/dist/index.html"
@@ -123,21 +123,31 @@ workflows:
             exit 1
           fi
 
-          echo "🔧 Patching $INDEX_FILE for Blazor Hybrid..."
+          python3 <<'PY'
+from pathlib import Path
+import re
 
-          # Remove wasm bootstrap lines
-          sed -i.bak '/blazor.boot.json/d' "$INDEX_FILE" || true
-          sed -i.bak '/dotnet.js/d' "$INDEX_FILE" || true
+index_path = Path("BibleQuestForKids/wwwroot/dist/index.html")
+html = index_path.read_text(encoding="utf-8")
+original = html
 
-          # Inject hybrid runtime script before </body>
-          if ! grep -q "blazor.webview.js" "$INDEX_FILE"; then
-            sed -i '' 's#</body>#  <script src="_framework/blazor.webview.js" autostart="false"></script>\n</body>#' "$INDEX_FILE"
-          fi
+# Remove any script tags that try to bootstrap the standalone WASM runtime.
+html = re.sub(r"\s*<script[^>]+_framework/(?:dotnet|blazor\.boot)\.js[^>]*></script>", "", html, flags=re.IGNORECASE)
+html = re.sub(r"\s*<script[^>]+blazor\.boot\.json[^>]*></script>", "", html, flags=re.IGNORECASE)
 
-          echo "✅ Patched index.html now references blazor.webview.js"
-          head -n 15 "$INDEX_FILE"
+# Canonicalise the hybrid runtime tag so we control the attributes and relative path.
+html = re.sub(r"\s*<script[^>]+blazor\.webview\.js[^>]*></script>", "", html, flags=re.IGNORECASE)
+html = html.replace(
+    "</body>",
+    '  <script src="_framework/blazor.webview.js" autostart="false" data-blazor-runtime-base="./_framework/"></script>\n</body>'
+)
 
-          rm -f "${INDEX_FILE}.bak"
+if html != original:
+    index_path.write_text(html, encoding="utf-8")
+PY
+
+          echo "✅ Ensured dist/index.html is wired for the hybrid runtime"
+          head -n 20 "$INDEX_FILE"
 
       - name: Copy Blazor Hybrid runtime (blazor.webview.js)
         script: |
