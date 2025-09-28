@@ -2,8 +2,7 @@ name: iOS Build & Deploy (Bible Quest for Kids)
 
 on:
   push:
-    branches:
-      - main
+    branches: [ "main" ]
   workflow_dispatch:
 
 jobs:
@@ -11,61 +10,41 @@ jobs:
     runs-on: macos-latest
 
     steps:
-      # 1. Checkout repo
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      # 2. Setup .NET SDK
       - name: Setup .NET 9
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '9.0.x'
+          dotnet-version: 9.0.x
 
-      # 3. Install MAUI workload
-      - name: Install .NET MAUI workloads
+      - name: Install MAUI workloads
         run: dotnet workload install maui ios
 
-      # Debug: confirm repo structure
-      - name: List repo files
-        run: ls -R
-
-      # 4. Show NuGet sources
-      - name: List NuGet sources
-        run: dotnet nuget list source
-
-      # 5. Ensure feeds are clean & present
-      - name: Reset NuGet sources
+      - name: Configure NuGet sources
         run: |
-          dotnet nuget remove source nuget.org || true
-          dotnet nuget remove source maui || true
+          dotnet nuget remove source nuget-org || true
+          dotnet nuget remove source maui-feed || true
           dotnet nuget add source https://api.nuget.org/v3/index.json -n nuget-org
           dotnet nuget add source https://pkgs.dev.azure.com/dnceng/public/_packaging/maui/nuget/v3/index.json -n maui-feed
+          dotnet nuget list source
 
-      # 6. Restore NuGet
       - name: Restore NuGet packages
-        run: dotnet restore BibleQuest/BibleQuestForKids/BibleQuestForKids.sln --no-cache --disable-parallel --verbosity detailed
+        run: dotnet restore BibleQuestForKids/BibleQuestForKids.sln --no-cache --disable-parallel --verbosity detailed
 
-      # 7. Build iOS app
       - name: Build iOS app
-        run: dotnet build BibleQuest/BibleQuestForKids/BibleQuestForKids.sln -c Release -f:net9.0-ios /p:ArchiveOnBuild=true --verbosity detailed
+        run: dotnet build BibleQuestForKids/BibleQuestForKids.sln -c Release -f:net9.0-ios /p:ArchiveOnBuild=true --verbosity detailed
 
-      # 8. Publish IPA
       - name: Publish iOS IPA
-        run: dotnet publish BibleQuest/BibleQuestForKids/BibleQuestForKids.sln -c Release -f:net9.0-ios /p:BuildIpa=true --verbosity detailed
+        run: dotnet publish BibleQuestForKids/BibleQuestForKids.sln -c Release -f:net9.0-ios /p:BuildIpa=true --verbosity detailed
 
-      # 9. Upload IPA artifact (downloadable from Actions tab)
-      - name: Upload IPA Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: BibleQuestForKids-ipa
-          path: '**/*.ipa'
-
-      # 10. Upload to TestFlight
       - name: Upload IPA to TestFlight
         uses: apple-actions/upload-testflight-build@v1
         with:
-          app-path: '**/*.ipa'
+          app-path: BibleQuestForKids/bin/Release/net9.0-ios/ios-arm64/publish/*.ipa
+          issuer-id: ${{ secrets.APPLE_ISSUER_ID }}
+          api-key-id: ${{ secrets.APPLE_KEY_ID }}
+          api-private-key: ${{ secrets.APPLE_PRIVATE_KEY }}
           apple-id: ${{ secrets.APPLE_ID }}
-          app-password: ${{ secrets.APP_SPECIFIC_PASSWORD }}
-          bundle-id: app.biblequest
+          app-specific-password: ${{ secrets.APP_SPECIFIC_PASSWORD }}
           team-id: ${{ secrets.TEAM_ID }}
