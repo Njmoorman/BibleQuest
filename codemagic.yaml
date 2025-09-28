@@ -124,26 +124,41 @@ workflows:
           fi
 
           python3 <<'PY'
-from pathlib import Path
-import re
+            from pathlib import Path
+            import re
 
-index_path = Path("BibleQuestForKids/wwwroot/dist/index.html")
-html = index_path.read_text(encoding="utf-8")
-original = html
+            index_path = Path("BibleQuestForKids/wwwroot/dist/index.html")
+            html = index_path.read_text(encoding="utf-8")
+            original = html
 
-# Remove any script tags that try to bootstrap the standalone WASM runtime.
-html = re.sub(r"\s*<script[^>]+_framework/(?:dotnet|blazor\.boot)\.js[^>]*></script>", "", html, flags=re.IGNORECASE)
-html = re.sub(r"\s*<script[^>]+blazor\.boot\.json[^>]*></script>", "", html, flags=re.IGNORECASE)
+            # Remove any script tags that try to bootstrap the standalone WASM runtime.
+            html = re.sub(
+                r"\s*<script[^>]+_framework/(?:dotnet|blazor\.boot)\.js[^>]*></script>",
+                "",
+                html,
+                flags=re.IGNORECASE,
+            )
+            html = re.sub(
+                r"\s*<script[^>]+blazor\.boot\.json[^>]*></script>",
+                "",
+                html,
+                flags=re.IGNORECASE,
+            )
 
-# Canonicalise the hybrid runtime tag so we control the attributes and relative path.
-html = re.sub(r"\s*<script[^>]+blazor\.webview\.js[^>]*></script>", "", html, flags=re.IGNORECASE)
-html = html.replace(
-    "</body>",
-    '  <script src="_framework/blazor.webview.js" autostart="false" data-blazor-runtime-base="./_framework/"></script>\n</body>'
-)
+            # Canonicalise the hybrid runtime tag so we control the attributes and relative path.
+            html = re.sub(
+                r"\s*<script[^>]+blazor\.webview\.js[^>]*></script>",
+                "",
+                html,
+                flags=re.IGNORECASE,
+            )
+            html = html.replace(
+                "</body>",
+                '  <script src="_framework/blazor.webview.js" autostart="false" data-blazor-runtime-base="./_framework/"></script>\n</body>',
+            )
 
-if html != original:
-    index_path.write_text(html, encoding="utf-8")
+            if html != original:
+                index_path.write_text(html, encoding="utf-8")
 PY
 
           echo "✅ Ensured dist/index.html is wired for the hybrid runtime"
