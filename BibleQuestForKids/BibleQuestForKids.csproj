@@ -42,13 +42,13 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Maui.Controls" Version="8.0.*" />
-    <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="8.0.*" />
+    <!-- Pure WebView build: no Blazor runtime package required. -->
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Keep the built React + Blazor assets bundled with the MAUI app -->
-    <MauiAsset Include="wwwroot/dist/**/*"
-               LogicalName="wwwroot/dist/%(RecursiveDir)%(Filename)%(Extension)" />
+    <!-- Ship only the compiled Vite assets. Keep logical paths aligned for MAUI bundle. -->
+    <MauiAsset Include="wwwroot/dist/**"
+               LogicalName="wwwroot/%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 
 </Project>
