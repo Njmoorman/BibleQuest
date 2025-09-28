@@ -33,23 +33,9 @@ jobs:
 
       - name: Configure NuGet sources
         run: |
-          # Remove if they exist
-          if dotnet nuget list source | grep -q "nuget-org"; then
-              dotnet nuget remove source nuget-org
-          fi
-          if dotnet nuget list source | grep -q "maui-feed"; then
-              dotnet nuget remove source maui-feed
-          fi
-
-          # Add if missing
-          if ! dotnet nuget list source | grep -q "nuget-org"; then
-              dotnet nuget add source https://api.nuget.org/v3/index.json -n nuget-org
-          fi
-          if ! dotnet nuget list source | grep -q "maui-feed"; then
-              dotnet nuget add source https://pkgs.dev.azure.com/dnceng/public/_packaging/maui/nuget/v3/index.json -n maui-feed
-          fi
-
-          # List all sources for verification
+          # Always reset nuget.org cleanly
+          dotnet nuget remove source nuget-org || true
+          dotnet nuget add source https://api.nuget.org/v3/index.json -n nuget-org
           dotnet nuget list source
 
       - name: List repo files for debugging
