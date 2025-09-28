@@ -11,33 +11,26 @@ jobs:
     runs-on: macos-latest
 
     steps:
-      # 1. Checkout repo
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      # 2. Setup .NET SDK
       - name: Setup .NET 9
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '9.0.x'
 
-      # 3. Install MAUI workload
       - name: Install .NET MAUI workloads
         run: dotnet workload install maui ios
 
-      # 4. Restore NuGet
       - name: Restore NuGet packages
         run: dotnet restore BibleQuest/BibleQuestForKids/BibleQuestForKids.sln
 
-      # 5. Build iOS App
       - name: Build iOS app
         run: dotnet build BibleQuest/BibleQuestForKids/BibleQuestForKids.sln -c Release -f:net9.0-ios /p:ArchiveOnBuild=true
 
-      # 6. Publish IPA
       - name: Publish iOS IPA
         run: dotnet publish BibleQuest/BibleQuestForKids/BibleQuestForKids.sln -c Release -f:net9.0-ios /p:BuildIpa=true
 
-      # 7. Upload to TestFlight
       - name: Upload IPA to TestFlight
         uses: apple-actions/upload-testflight-build@v1
         with:
