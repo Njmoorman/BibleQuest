@@ -14,16 +14,28 @@
     <div id="app">
       <noscript>Enable JavaScript to load Bible Quest for Kids.</noscript>
     </div>
-
-    <script src="/dist/_framework/blazor.webview.js"></script>
     <script>
       (function () {
-        const BLAZOR_RUNTIME_BASE = "/dist/_framework/";
-        const BLAZOR_BOOT_JSON = `${BLAZOR_RUNTIME_BASE}blazor.boot.json`;
-        const DOTNET_JS = `${BLAZOR_RUNTIME_BASE}dotnet.js`;
+        const runtimeScript = document.querySelector(
+          'script[src$="_framework/blazor.webview.js"]'
+        );
+        const runtimeBase =
+          runtimeScript?.dataset?.blazorRuntimeBase ??
+          window.BibleQuest?.blazorRuntimeBase ??
+          "./_framework/";
+        const normalisedRuntimeBase = runtimeBase.endsWith("/")
+          ? runtimeBase
+          : `${runtimeBase}/`;
+        const BLAZOR_BOOT_JSON = `${normalisedRuntimeBase}blazor.boot.json`;
+        const DOTNET_JS = `${normalisedRuntimeBase}dotnet.js`;
         const namespace = (window.BibleQuest = window.BibleQuest || {});
 
         namespace.ensureBlazorRuntime = async () => {
+          if (!runtimeScript) {
+            console.info("BibleQuest: blazor.webview.js not present; skipping MAUI runtime probe.");
+            return null;
+          }
+
           if (!namespace._blazorRuntimeProbe) {
             namespace._blazorRuntimeProbe = (async () => {
               const bootUrl = new URL(BLAZOR_BOOT_JSON, window.location.href);
@@ -53,10 +65,12 @@
             return;
           }
 
-          const manifestUrl = new URL("./dist/manifest.json", window.location.href);
+          const manifestUrl = new URL("./manifest.json", window.location.href);
 
           try {
-            await namespace.ensureBlazorRuntime();
+            if (runtimeScript) {
+              await namespace.ensureBlazorRuntime();
+            }
             const manifestResponse = await fetch(manifestUrl);
             if (!manifestResponse.ok) {
               throw new Error(`Manifest fetch failed: ${manifestResponse.status} ${manifestResponse.statusText}`);
@@ -70,7 +84,7 @@
             }
 
             const ensureStylesheet = (relativePath) => {
-              const href = new URL(`./dist/${relativePath}`, manifestUrl).href;
+              const href = new URL(`./${relativePath}`, manifestUrl).href;
               if (document.querySelector(`link[data-react-bundle='${href}']`)) {
                 return;
               }
@@ -84,7 +98,7 @@
 
             (entry.css ?? []).forEach((cssFile) => ensureStylesheet(cssFile));
 
-            const bundleUrl = new URL(`./dist/${entry.file}`, manifestUrl);
+            const bundleUrl = new URL(`./${entry.file}`, manifestUrl);
             await import(bundleUrl.href);
             namespace._reactLoaded = true;
           } catch (error) {

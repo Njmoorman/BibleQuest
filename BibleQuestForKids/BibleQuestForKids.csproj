@@ -42,6 +42,13 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Maui.Controls" Version="8.0.*" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="8.0.*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Keep the built React + Blazor assets bundled with the MAUI app -->
+    <MauiAsset Include="wwwroot/dist/**/*"
+               LogicalName="wwwroot/dist/%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 
 </Project>
