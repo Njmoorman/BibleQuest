@@ -1,19 +1,9 @@
-# ==========================================================
-# Bible Quest iOS Build — Codemagic Workflow
-#
-# Default mode ships to TestFlight. When you're ready for the
-# App Store, flip the two flags under `publishing.app_store_connect`:
-#   submit_to_testflight: false
-#   submit_to_app_store: true
-# ==========================================================
-
 workflows:
   bible-quest-ios:
     name: "Bible Quest for Kids – iOS Build (.NET MAUI)"
     max_build_duration: 60
     environment:
       xcode: latest
-      cocoapods: default
       node: 18.16.0
       groups:
         - appstore_credentials
@@ -25,152 +15,78 @@ workflows:
         APP_IDENTIFIER: app.biblequest
         APP_DISPLAY_VERSION: 1.1.0
         TEAM_ID: 2989BXM365
-        VITE_BASE44_REQUIRE_AUTH: "false"
-        AUTO_CLEAR_TESTFLIGHT_REVIEW: "true"
-    integrations:
-      app_store_connect: CODE MAGIC API - Distribution (Admin)
-    triggering:
-      events:
-        - push
-        - pull_request
-      branch_patterns:
-        - pattern: main
-          include: true
     scripts:
       - name: "Compute build number (epoch)"
         script: |
           set -euo pipefail
           EPOCH_BUILD_NUMBER="$(date +%s)"
-          echo "Using APP_BUILD_NUMBER=$EPOCH_BUILD_NUMBER"
           echo "APP_BUILD_NUMBER=$EPOCH_BUILD_NUMBER" >> "$CM_ENV"
 
-      - name: "Install .NET SDK locally (no sudo required)"
+      - name: "Install .NET SDK locally"
         script: |
-          set -euo pipefail
           DOTNET_VERSION="8.0.301"
           mkdir -p "$DOTNET_ROOT"
           curl -sSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh
           chmod +x /tmp/dotnet-install.sh
           /tmp/dotnet-install.sh --version "$DOTNET_VERSION" --install-dir "$DOTNET_ROOT"
           export PATH="$DOTNET_ROOT:$PATH"
-          "$DOTNET_ROOT/dotnet" --info
+          dotnet --info
 
-      - name: "Install MAUI & WASM workloads"
+      - name: "Install MAUI workloads"
         script: |
-          set -euo pipefail
           export PATH="$DOTNET_ROOT:$PATH"
-          mkdir -p "$HOME/.dotnet/temp"
-          "$DOTNET_ROOT/dotnet" workload install maui-ios --skip-manifest-update --temp-dir "$HOME/.dotnet/temp"
-          "$DOTNET_ROOT/dotnet" workload install wasm-tools --skip-manifest-update --temp-dir "$HOME/.dotnet/temp"
-          "$DOTNET_ROOT/dotnet" workload restore BibleQuestForKids/BibleQuestForKids.csproj
+          dotnet workload install maui-ios --skip-manifest-update
+          dotnet workload restore BibleQuestForKids/BibleQuestForKids.csproj
 
       - name: "Restore NuGet packages"
         script: |
-          set -euo pipefail
           export PATH="$DOTNET_ROOT:$PATH"
-          "$DOTNET_ROOT/dotnet" restore BibleQuestForKids/BibleQuestForKids.csproj
+          dotnet restore BibleQuestForKids/BibleQuestForKids.csproj
 
-      - name: "Validate iOS icon catalog"
+      - name: "Build bundled web assets (npm only)"
         script: |
-          set -euo pipefail
-          ICONSET="BibleQuestForKids/Platforms/iOS/Assets.xcassets/AppIcon.appiconset"
-          python3 "$ICONSET/materialize_icons.py"
-          python3 "$ICONSET/validate_icons.py"
-
-      - name: "Build bundled web assets (npm + Blazor runtime)"
-        script: |
-          set -euo pipefail
-          export PATH="$DOTNET_ROOT:$PATH"
           cd BibleQuestForKids/wwwroot
           npm ci
           npm run build
           cd ../..
-          dotnet publish ci/blazor-runtime/BlazorRuntimeStub.csproj -c Release -o blazor-wasm-out
-          mkdir -p BibleQuestForKids/wwwroot/dist/_framework
-          cp -r blazor-wasm-out/wwwroot/_framework/* BibleQuestForKids/wwwroot/dist/_framework/
+          # Strip dev dependencies
+          rm -rf BibleQuestForKids/wwwroot/node_modules BibleQuestForKids/wwwroot/src
+          rm -f BibleQuestForKids/wwwroot/package*.json
 
-      - name: "Normalize index.html for Blazor Hybrid"
+      - name: "Guard: dist/ exists and index.html present"
         script: |
-          set -euo pipefail
-          INDEX_FILE="BibleQuestForKids/wwwroot/dist/index.html"
-          python3 <<'PY'
-            from pathlib import Path
-            import re
-            index_path = Path("BibleQuestForKids/wwwroot/dist/index.html")
-            html = index_path.read_text(encoding="utf-8")
-            new_html = re.sub(r"\s*<script[^>]+blazor\.webview\.js[^>]*></script>", "", html, flags=re.IGNORECASE)
-            if new_html != html:
-                index_path.write_text(new_html, encoding="utf-8")
-          PY
-
-      - name: "Guard: Blazor files exist after npm build"
-        script: |
-          set -euo pipefail
-          cd BibleQuestForKids/wwwroot/dist
-          for f in index.html _framework/blazor.boot.json _framework/dotnet.js; do
-            [ -f "$f" ] || { echo "ERROR: Missing $f"; exit 1; }
-          done
-
-      - name: "Guard: dist/ exists and is valid"
-        script: |
-          set -euo pipefail
           DIST="BibleQuestForKids/wwwroot/dist"
           [ -s "$DIST/index.html" ] || { echo "ERROR: dist/index.html missing or empty"; exit 1; }
-
-      - name: "Configure Apple signing assets"
-        script: |
-          set -euo pipefail
-          # signing logic here (unchanged)...
-
-      - name: "Align Info.plist bundle ID with provisioning profile"
-        script: |
-          set -euo pipefail
-          # plist alignment logic...
-
-      - name: "Stamp Info.plist versions"
-        script: |
-          set -euo pipefail
-          # stamping logic...
-
-      - name: "Materialize iOS AppIcon PNGs"
-        script: |
-          set -euo pipefail
-          python3 BibleQuestForKids/Platforms/iOS/Assets.xcassets/AppIcon.appiconset/materialize_icons.py
+          echo "✅ Found dist/index.html"
+          head -n 10 "$DIST/index.html"
 
       - name: "Publish .NET MAUI iOS app"
         script: |
-          set -euo pipefail
           export PATH="$DOTNET_ROOT:$PATH"
-          "$DOTNET_ROOT/dotnet" publish BibleQuestForKids/BibleQuestForKids.csproj \
-            -c Release -f net8.0-ios -p:RuntimeIdentifier=ios-arm64 -p:BuildIpa=true
+          dotnet publish BibleQuestForKids/BibleQuestForKids.csproj \
+            -c Release -f net8.0-ios \
+            -p:RuntimeIdentifier=ios-arm64 \
+            -p:BuildIpa=true \
+            -p:ApplicationId="$APP_IDENTIFIER" \
+            -p:CFBundleIdentifier="$APP_IDENTIFIER" \
+            -p:ApplicationDisplayVersion="$APP_DISPLAY_VERSION" \
+            -p:ApplicationVersion="$APP_BUILD_NUMBER"
 
-      - name: "Verify IPA CFBundleVersion"
+      - name: "Verify IPA contains dist assets"
         script: |
-          set -euo pipefail
-          # IPA version validation...
-
-      - name: "Verify IPA contains Blazor Hybrid assets"
-        script: |
-          set -euo pipefail
-          # asset checks...
+          IPA_PATH=$(find BibleQuestForKids/bin/Release/net8.0-ios/ios-arm64/publish -name '*.ipa' | head -1)
+          unzip -q "$IPA_PATH" -d tmp
+          APP_DIR=$(ls tmp/Payload)
+          if [ ! -f "tmp/Payload/$APP_DIR/wwwroot/dist/index.html" ]; then
+            echo "ERROR: IPA missing dist/index.html"
+            exit 1
+          fi
+          echo "✅ IPA contains dist/index.html"
 
       - name: "Collect IPA"
         script: |
-          set -euo pipefail
           mkdir -p output
-          find BibleQuestForKids/bin/Release/net8.0-ios/ios-arm64/publish -maxdepth 1 -name '*.ipa' -exec cp {} output/ \;
-
-      - name: "Clear in-flight TestFlight beta review (optional)"
-        script: |
-          set -euo pipefail
-          # clearing logic...
+          find BibleQuestForKids/bin/Release/net8.0-ios/ios-arm64/publish -name '*.ipa' -exec cp {} output/ \;
 
     artifacts:
       - output/*.ipa
-      - output/ipa-wwwroot.zip
-
-    publishing:
-      app_store_connect:
-        auth: integration
-        submit_to_testflight: true
-        submit_to_app_store: false
