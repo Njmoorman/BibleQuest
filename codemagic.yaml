@@ -67,6 +67,14 @@ workflows:
           "$DOTNET_ROOT/dotnet" workload install wasm-tools --skip-manifest-update --temp-dir "$HOME/.dotnet/temp"
           "$DOTNET_ROOT/dotnet" workload restore BibleQuestForKids/BibleQuestForKids.csproj
 
+      - name: Restore NuGet packages (ensure blazor.webview.js available later)
+        script: |
+          set -euo pipefail
+          export PATH="$DOTNET_ROOT:$PATH"
+          # Restoring here guarantees the Microsoft.AspNetCore.Components.WebView.Maui pack exists
+          # before we try to copy blazor.webview.js into the hybrid bundle.
+          "$DOTNET_ROOT/dotnet" restore BibleQuestForKids/BibleQuestForKids.csproj
+
       - name: Validate iOS icon catalog
         script: |
           set -euo pipefail
@@ -213,12 +221,6 @@ workflows:
 
           echo "✅ dist/index.html present and references blazor.webview.js"
           head -n 10 "$DIST/index.html" || true
-
-      - name: Restore NuGet packages
-        script: |
-          set -euo pipefail
-          export PATH="$DOTNET_ROOT:$PATH"
-          "$DOTNET_ROOT/dotnet" restore BibleQuestForKids/BibleQuestForKids.csproj
 
       - name: Configure Apple signing assets
         script: |
