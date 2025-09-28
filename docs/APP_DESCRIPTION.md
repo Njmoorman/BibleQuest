@@ -45,4 +45,4 @@ Coins, XP, and stars tally automatically after minigames by reading performance 
 - Built-in seeding ensures first-time players always see content, even before church leaders upload custom verse banks.【F:BibleQuestForKids/wwwroot/src/pages/EmojiVerse.jsx†L1-L80】【F:BibleQuestForKids/wwwroot/src/pages/WiseWordle.jsx†L1-L120】
 
 ## Ready for TestFlight and App Store
-The codemagic.yaml pipeline will package this .NET MAUI build for iOS TestFlight distribution first, then App Store release once localization, screenshots, and App Store Connect metadata match the experiences detailed above. Keep the descriptions handy when filling out TestFlight beta notes versus App Store listing copy.
+The `.github/workflows/ios-build.yml` GitHub Actions pipeline now packages this .NET MAUI build for iOS TestFlight distribution first, then App Store release once localization, screenshots, and App Store Connect metadata match the experiences detailed above. Keep the descriptions handy when filling out TestFlight beta notes versus App Store listing copy so marketing language stays consistent across TestFlight and App Store submissions.
