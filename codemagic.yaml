@@ -13,7 +13,7 @@ workflows:
         DOTNET_SKIP_FIRST_TIME_EXPERIENCE: "1"
         DOTNET_CLI_TELEMETRY_OPTOUT: "1"
         APP_IDENTIFIER: app.biblequest
-        APP_DISPLAY_VERSION: 1.1.0
+        APP_DISPLAY_VERSION: 1.1.0 # Keep in sync with App Store metadata before submissions
         TEAM_ID: 2989BXM365
     scripts:
       - name: "Compute build number (epoch)"
@@ -43,6 +43,42 @@ workflows:
           export PATH="$DOTNET_ROOT:$PATH"
           dotnet restore BibleQuestForKids/BibleQuestForKids.csproj
 
+      - name: "Install signing assets (TestFlight uses same assets as App Store)"
+        script: |
+          set -euo pipefail
+          keychain initialize
+
+          if [ -z "${APPLE_CERTIFICATE_P12_BASE64:-}" ] || [ -z "${APPLE_CERTIFICATE_PASSWORD:-}" ]; then
+            echo "ERROR: Missing APPLE_CERTIFICATE_P12_BASE64 or APPLE_CERTIFICATE_PASSWORD environment variables."
+            echo "Upload the distribution certificate (.p12) and password as secure environment variables in Codemagic."
+            exit 1
+          fi
+
+          if [ -z "${APPLE_PROVISIONING_PROFILE_BASE64:-}" ]; then
+            echo "ERROR: Missing APPLE_PROVISIONING_PROFILE_BASE64 environment variable."
+            echo "Provide the App Store provisioning profile (.mobileprovision) for the bundle id $APP_IDENTIFIER."
+            exit 1
+          fi
+
+          CERT_P12="$CM_BUILD_DIR/apple_distribution.p12"
+          echo "$APPLE_CERTIFICATE_P12_BASE64" | base64 --decode > "$CERT_P12"
+          keychain add-certificates --certificate "$CERT_P12" --certificate-password "$APPLE_CERTIFICATE_PASSWORD"
+
+          PROFILE_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
+          mkdir -p "$PROFILE_DIR"
+          PROFILE_PATH="$PROFILE_DIR/$APP_IDENTIFIER.mobileprovision"
+          echo "$APPLE_PROVISIONING_PROFILE_BASE64" | base64 --decode > "$PROFILE_PATH"
+
+          CODESIGN_IDENTITY="$(security find-identity -v -p codesigning | awk 'NR==1 {print $2}')"
+          if [ -z "$CODESIGN_IDENTITY" ]; then
+            echo "ERROR: No code signing identity imported."
+            exit 1
+          fi
+
+          echo "CODESIGN_KEY=$CODESIGN_IDENTITY" >> "$CM_ENV"
+          echo "CODESIGN_PROVISION=$PROFILE_PATH" >> "$CM_ENV"
+          echo "Stored codesign identity and provisioning profile for MAUI publish"
+
       - name: "Build bundled web assets (npm only)"
         script: |
           cd BibleQuestForKids/wwwroot
@@ -70,7 +106,10 @@ workflows:
             -p:ApplicationId="$APP_IDENTIFIER" \
             -p:CFBundleIdentifier="$APP_IDENTIFIER" \
             -p:ApplicationDisplayVersion="$APP_DISPLAY_VERSION" \
-            -p:ApplicationVersion="$APP_BUILD_NUMBER"
+            -p:ApplicationVersion="$APP_BUILD_NUMBER" \
+            -p:CodesignKey="$CODESIGN_KEY" \
+            -p:CodesignProvision="$CODESIGN_PROVISION" \
+            -p:CodesignTeamId="$TEAM_ID"
 
       - name: "Verify IPA contains dist assets"
         script: |
