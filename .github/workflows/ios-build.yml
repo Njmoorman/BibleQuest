@@ -29,26 +29,30 @@ jobs:
       - name: List repo files
         run: ls -R
 
-      # 4. Restore NuGet with flags for CI stability
+      # 4. Ensure NuGet.org is available
+      - name: Ensure NuGet.org source
+        run: dotnet nuget add source https://api.nuget.org/v3/index.json -n nuget.org --store-password-in-clear-text
+
+      # 5. Restore NuGet with flags for CI stability
       - name: Restore NuGet packages
-        run: dotnet restore BibleQuestForKids/BibleQuestForKids.sln --no-cache --disable-parallel
+        run: dotnet restore BibleQuestForKids/BibleQuestForKids.sln --no-cache --disable-parallel --verbosity detailed
 
-      # 5. Build iOS app
+      # 6. Build iOS app
       - name: Build iOS app
-        run: dotnet build BibleQuestForKids/BibleQuestForKids.sln -c Release -f:net9.0-ios /p:ArchiveOnBuild=true
+        run: dotnet build BibleQuestForKids/BibleQuestForKids.sln -c Release -f:net9.0-ios /p:ArchiveOnBuild=true --verbosity detailed
 
-      # 6. Publish IPA
+      # 7. Publish IPA
       - name: Publish iOS IPA
-        run: dotnet publish BibleQuestForKids/BibleQuestForKids.sln -c Release -f:net9.0-ios /p:BuildIpa=true
+        run: dotnet publish BibleQuestForKids/BibleQuestForKids.sln -c Release -f:net9.0-ios /p:BuildIpa=true --verbosity detailed
 
-      # 7. Upload IPA as GitHub artifact (downloadable from Actions tab)
+      # 8. Upload IPA as GitHub artifact (downloadable from Actions tab)
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
           name: BibleQuestForKids-ipa
           path: '**/*.ipa'
 
-      # 8. Upload to TestFlight
+      # 9. Upload to TestFlight
       - name: Upload IPA to TestFlight
         uses: apple-actions/upload-testflight-build@v1
         with:
