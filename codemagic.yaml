@@ -144,10 +144,17 @@ workflows:
           set -euo pipefail
           export PATH="$DOTNET_ROOT:$PATH"
 
+          # Look in the standard NuGet cache first (Codemagic sets HOME to /Users/builder).
           SEARCH_DIRS=(
-            "$DOTNET_ROOT/.nuget/packages/microsoft.aspnetcore.components.webview.maui"
             "$HOME/.nuget/packages/microsoft.aspnetcore.components.webview.maui"
+            "$DOTNET_ROOT/.nuget/packages/microsoft.aspnetcore.components.webview.maui"
           )
+
+          # .NET workloads may place packs in the macOS "Application Support" directory.
+          MAC_PACKS_DIR="$HOME/Library/Application Support/dotnet/packs"
+          if [ -d "$MAC_PACKS_DIR" ]; then
+            SEARCH_DIRS+=("$MAC_PACKS_DIR")
+          fi
 
           # .NET workloads keep packs outside of the NuGet cache on macOS build agents.
           # Search those pack locations as a fallback so we can always source blazor.webview.js.
