@@ -106,16 +106,42 @@ workflows:
           rm -f package.json package-lock.json vite.config.js tailwind.config.js postcss.config.js eslint.config.js \
             jsconfig.json components.json README.md
 
+      - name: Patch index.html for Blazor Hybrid
+        script: |
+          set -euo pipefail
+          INDEX_FILE="BibleQuestForKids/wwwroot/dist/index.html"
+          if [ ! -f "$INDEX_FILE" ]; then
+            echo "ERROR: index.html not found at $INDEX_FILE"
+            exit 1
+          fi
+
+          echo "🔧 Patching $INDEX_FILE for Blazor Hybrid..."
+
+          # Remove wasm bootstrap lines
+          sed -i.bak '/blazor.boot.json/d' "$INDEX_FILE" || true
+          sed -i.bak '/dotnet.js/d' "$INDEX_FILE" || true
+          rm -f "$INDEX_FILE.bak"
+
+          # Inject hybrid runtime script before </body>
+          if ! grep -q "blazor.webview.js" "$INDEX_FILE"; then
+            # macOS sed requires an explicit empty extension for in-place edits without backup
+            sed -i '' 's#</body>#  <script src="_framework/blazor.webview.js" autostart="false"></script>\
+</body>#' "$INDEX_FILE"
+          fi
+
+          echo "✅ Patched index.html now references blazor.webview.js"
+          head -n 15 "$INDEX_FILE"
+
       - name: "Guard: Blazor files exist after npm build"
         script: |
           set -euo pipefail
           cd BibleQuestForKids/wwwroot/dist
 
-          REQUIRED_FILES=("index.html" "_framework/blazor.boot.json" "_framework/dotnet.js")
+          REQUIRED_FILES=("index.html" "_framework/blazor.webview.js")
 
           for f in "${REQUIRED_FILES[@]}"; do
             if [ ! -f "$f" ]; then
-              echo "ERROR: Missing required Blazor file: $f"
+              echo "ERROR: Missing required Blazor Hybrid file: $f"
               exit 1
             fi
             SIZE=$(stat -f%z "$f" 2>/dev/null || stat -c%s "$f")
@@ -123,17 +149,21 @@ workflows:
             echo "✅ $f — $SIZE bytes — SHA256: $HASH"
           done
 
-          # Verify runtime is actually referenced in index.html
-          if ! grep -q "blazor.boot.json" index.html; then
-            echo "ERROR: index.html does not reference blazor.boot.json"
+          # Verify hybrid runtime is actually referenced in index.html
+          if ! grep -q "blazor.webview.js" index.html; then
+            echo "ERROR: index.html does not reference blazor.webview.js"
             exit 1
           fi
-          if ! grep -q "dotnet.js" index.html; then
-            echo "ERROR: index.html does not reference dotnet.js"
+          if grep -q "blazor.boot.json" index.html; then
+            echo "ERROR: index.html still references blazor.boot.json"
+            exit 1
+          fi
+          if grep -q "dotnet.js" index.html; then
+            echo "ERROR: index.html still references dotnet.js"
             exit 1
           fi
 
-          echo "✅ index.html contains references to blazor.boot.json and dotnet.js"
+          echo "✅ index.html references blazor.webview.js (hybrid runtime only)"
           echo "Preview of dist/index.html (first 10 lines):"
           head -n 10 index.html
 
@@ -144,13 +174,12 @@ workflows:
 
           REQUIRED_FILES=(
             "$DIST_DIR/index.html"
-            "$DIST_DIR/_framework/blazor.boot.json"
-            "$DIST_DIR/_framework/dotnet.js"
+            "$DIST_DIR/_framework/blazor.webview.js"
           )
 
           for f in "${REQUIRED_FILES[@]}"; do
             if [ ! -f "$f" ]; then
-              echo "ERROR: Missing required Blazor file: $f"
+              echo "ERROR: Missing required Blazor Hybrid file: $f"
               exit 1
             fi
           done
@@ -361,15 +390,14 @@ workflows:
 
           REQUIRED_FILES=(
             "$TMP_DIR/Payload/$APP_DIR/wwwroot/dist/index.html"
-            "$TMP_DIR/Payload/$APP_DIR/wwwroot/dist/_framework/blazor.boot.json"
-            "$TMP_DIR/Payload/$APP_DIR/wwwroot/dist/_framework/dotnet.js"
+            "$TMP_DIR/Payload/$APP_DIR/wwwroot/dist/_framework/blazor.webview.js"
           )
-          BASELINE_HASHES=("${BASELINE_INDEX_HTML_HASH:-}" "${BASELINE_BLAZOR_BOOT_HASH:-}" "${BASELINE_DOTNET_JS_HASH:-}")
+          BASELINE_HASHES=("${BASELINE_INDEX_HTML_HASH:-}" "${BASELINE_BLAZOR_WEBVIEW_HASH:-}")
 
           i=0
           for f in "${REQUIRED_FILES[@]}"; do
             if [ ! -f "$f" ]; then
-              echo "ERROR: Missing required Blazor file: $f" >&2
+              echo "ERROR: Missing required Blazor Hybrid file: $f" >&2
               exit 1
             fi
 
@@ -392,20 +420,20 @@ workflows:
           done
 
           INDEX_HTML="$TMP_DIR/Payload/$APP_DIR/wwwroot/dist/index.html"
-          if ! grep -q "blazor.boot.json" "$INDEX_HTML"; then
-            echo "ERROR: IPA index.html does not reference blazor.boot.json" >&2
-            exit 1
-          fi
-          if ! grep -q "dotnet.js" "$INDEX_HTML"; then
-            echo "ERROR: IPA index.html does not reference dotnet.js" >&2
-            exit 1
-          fi
           if ! grep -q "blazor.webview.js" "$INDEX_HTML"; then
             echo "ERROR: IPA dist/index.html does not reference blazor.webview.js" >&2
             exit 1
           fi
+          if grep -q "blazor.boot.json" "$INDEX_HTML"; then
+            echo "ERROR: IPA index.html still references blazor.boot.json" >&2
+            exit 1
+          fi
+          if grep -q "dotnet.js" "$INDEX_HTML"; then
+            echo "ERROR: IPA index.html still references dotnet.js" >&2
+            exit 1
+          fi
 
-          echo "✅ IPA dist/index.html references blazor.boot.json, dotnet.js, and blazor.webview.js"
+          echo "✅ IPA dist/index.html references blazor.webview.js (hybrid runtime only)"
           echo "Preview of IPA’s dist/index.html (first 10 lines):"
           head -n 10 "$INDEX_HTML"
 
