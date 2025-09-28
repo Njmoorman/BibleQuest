@@ -150,6 +150,20 @@ workflows:
           echo "✅ dist/ packaging verified"
           ls -R "$DIST_DIR" | head -40
 
+      - name: "Guard: dist/ exists and hybrid script referenced"
+        script: |
+          set -euo pipefail
+          DIST="BibleQuestForKids/wwwroot/dist"
+          test -s "$DIST/index.html" || { echo "ERROR: dist/index.html missing"; exit 1; }
+
+          if ! grep -q "blazor.webview.js" "$DIST/index.html"; then
+            echo "ERROR: dist/index.html does not reference blazor.webview.js"
+            exit 1
+          fi
+
+          echo "✅ dist/index.html present and references blazor.webview.js"
+          head -n 10 "$DIST/index.html" || true
+
       - name: Restore NuGet packages
         script: |
           set -euo pipefail
@@ -317,7 +331,7 @@ workflows:
           fi
           echo "OK: IPA build number validated."
 
-      - name: Verify IPA contains Blazor assets
+      - name: Verify IPA contains dist/index.html (hybrid)
         script: |
           set -euo pipefail
           IPA_PATH=$(find BibleQuestForKids/bin/Release/net8.0-ios/ios-arm64/publish -maxdepth 1 -name '*.ipa' | head -1)
@@ -378,8 +392,12 @@ workflows:
             echo "ERROR: IPA index.html does not reference dotnet.js" >&2
             exit 1
           fi
+          if ! grep -q "blazor.webview.js" "$INDEX_HTML"; then
+            echo "ERROR: IPA dist/index.html does not reference blazor.webview.js" >&2
+            exit 1
+          fi
 
-          echo "✅ IPA index.html contains references to blazor.boot.json and dotnet.js"
+          echo "✅ IPA dist/index.html references blazor.boot.json, dotnet.js, and blazor.webview.js"
           echo "Preview of IPA’s dist/index.html (first 10 lines):"
           head -n 10 "$INDEX_HTML"
 

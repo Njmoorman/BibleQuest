@@ -23,6 +23,11 @@
     <ApplicationId>app.biblequest</ApplicationId>
   </PropertyGroup>
 
+  <!-- Strip the default wwwroot assets so only the hybrid build output is shipped. -->
+  <ItemGroup>
+    <MauiAsset Remove="wwwroot/**" />
+  </ItemGroup>
+
   <!-- Always package the Vite output (dist/) rather than raw sources -->
   <ItemGroup>
     <MauiAsset Include="wwwroot/dist/**"
