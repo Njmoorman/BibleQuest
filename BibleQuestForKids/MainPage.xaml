@@ -4,8 +4,7 @@
              xmlns:blazor="clr-namespace:Microsoft.AspNetCore.Components.WebView.Maui;assembly=Microsoft.AspNetCore.Components.WebView.Maui"
              xmlns:components="clr-namespace:BibleQuestForKids.Components"
              x:Class="BibleQuestForKids.MainPage">
-    <!-- Host the React experience inside a BlazorWebView so MAUI ships a single bundle across iOS/TestFlight/App Store. -->
-    <blazor:BlazorWebView HostPage="wwwroot/index.html">
+    <blazor:BlazorWebView HostPage="wwwroot/dist/index.html">
         <blazor:BlazorWebView.RootComponents>
             <blazor:RootComponent Selector="#app"
                                   ComponentType="{x:Type components:ReactHost}" />
