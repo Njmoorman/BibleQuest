@@ -95,7 +95,7 @@ workflows:
           rm -f package.json package-lock.json vite.config.js tailwind.config.js postcss.config.js eslint.config.js \
                 jsconfig.json components.json README.md
 
-      - name: Guard: dist contains index.html + JS bundle
+      - name: "Guard: dist contains index.html + JS bundle"
         script: |
           set -euo pipefail
           cd BibleQuestForKids/wwwroot/dist
