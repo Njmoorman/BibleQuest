@@ -1,4 +1,3 @@
-using Microsoft.AspNetCore.Components.WebView.Maui;
 using Microsoft.Maui;
 using Microsoft.Maui.Controls.Hosting;
 using Microsoft.Maui.Hosting;
@@ -11,14 +10,7 @@ public static class MauiProgram
     {
         var builder = MauiApp.CreateBuilder();
 
-        builder
-            .UseMauiApp<App>();
-
-        builder.Services.AddMauiBlazorWebView();
-
-#if DEBUG
-        builder.Services.AddBlazorWebViewDeveloperTools();
-#endif
+        builder.UseMauiApp<App>();
 
         return builder.Build();
     }
