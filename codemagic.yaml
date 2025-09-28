@@ -136,29 +136,32 @@ workflows:
           set -euo pipefail
           export PATH="$DOTNET_ROOT:$PATH"
 
-          SRC=$(find "$DOTNET_ROOT/../.nuget/packages/microsoft.aspnetcore.components.webview.maui" -type f -name blazor.webview.js | sort | tail -1 || true)
+          SRC=$(find "$HOME/.nuget/packages/microsoft.aspnetcore.components.webview.maui" -type f -name blazor.webview.js | sort | tail -1 || true)
           if [ -z "$SRC" ]; then
             echo "ERROR: Could not locate blazor.webview.js in NuGet cache"
+            echo "Contents of $HOME/.nuget/packages (first 50):"
+            ls -R "$HOME/.nuget/packages" | head -50 || true
             exit 1
           fi
 
-          DEST_DIR="BibleQuestForKids/wwwroot/dist/_framework"
-          mkdir -p "$DEST_DIR"
-          cp "$SRC" "$DEST_DIR/"
+          mkdir -p BibleQuestForKids/wwwroot/dist/_framework
+          cp "$SRC" BibleQuestForKids/wwwroot/dist/_framework/
 
-          echo "✅ Copied blazor.webview.js into dist/_framework from $SRC"
-          ls -l "$DEST_DIR" | grep blazor.webview.js
+          echo "✅ Copied blazor.webview.js into dist/_framework"
+          ls -l BibleQuestForKids/wwwroot/dist/_framework | grep blazor.webview.js || true
 
       - name: "Guard: Blazor files exist after npm build"
         script: |
           set -euo pipefail
           cd BibleQuestForKids/wwwroot/dist
 
-          REQUIRED_FILES=("index.html" "_framework/blazor.webview.js")
+          REQUIRED_FILES=("index.html" "_framework/blazor.boot.json" "_framework/dotnet.js" "_framework/blazor.webview.js")
 
           for f in "${REQUIRED_FILES[@]}"; do
             if [ ! -f "$f" ]; then
-              echo "ERROR: Missing required Blazor Hybrid file: $f"
+              echo "ERROR: Missing required Blazor file: $f"
+              echo "Contents of dist/_framework (first 50 files):"
+              find _framework -type f | sort | head -50
               exit 1
             fi
             SIZE=$(stat -f%z "$f" 2>/dev/null || stat -c%s "$f")
@@ -171,7 +174,7 @@ workflows:
             exit 1
           fi
 
-          echo "✅ index.html contains reference to blazor.webview.js"
+          echo "✅ All required Blazor runtime files are present in dist/_framework"
           head -n 10 index.html
 
       - name: "Guard: dist/ exists and hybrid script referenced"
