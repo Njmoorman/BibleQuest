@@ -136,18 +136,31 @@ workflows:
           set -euo pipefail
           export PATH="$DOTNET_ROOT:$PATH"
 
-          SRC=$(find "$HOME/.nuget/packages/microsoft.aspnetcore.components.webview.maui" -type f -name blazor.webview.js | sort | tail -1 || true)
+          SEARCH_DIRS=(
+            "$DOTNET_ROOT/.nuget/packages/microsoft.aspnetcore.components.webview.maui"
+            "$HOME/.nuget/packages/microsoft.aspnetcore.components.webview.maui"
+          )
+
+          SRC=""
+          for dir in "${SEARCH_DIRS[@]}"; do
+            if [ -d "$dir" ]; then
+              SRC=$(find "$dir" -type f -name blazor.webview.js | sort | tail -1 || true)
+              if [ -n "$SRC" ]; then
+                break
+              fi
+            fi
+          done
+
           if [ -z "$SRC" ]; then
-            echo "ERROR: Could not locate blazor.webview.js in NuGet cache"
-            echo "Contents of $HOME/.nuget/packages (first 50):"
-            ls -R "$HOME/.nuget/packages" | head -50 || true
+            echo "ERROR: Could not locate blazor.webview.js in any NuGet cache"
+            echo "Searched: ${SEARCH_DIRS[*]}"
             exit 1
           fi
 
           mkdir -p BibleQuestForKids/wwwroot/dist/_framework
           cp "$SRC" BibleQuestForKids/wwwroot/dist/_framework/
 
-          echo "✅ Copied blazor.webview.js into dist/_framework"
+          echo "✅ Copied blazor.webview.js from $SRC into dist/_framework"
           ls -l BibleQuestForKids/wwwroot/dist/_framework | grep blazor.webview.js || true
 
       - name: "Guard: Blazor files exist after npm build"
