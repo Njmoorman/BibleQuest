@@ -7,14 +7,14 @@ require 'json'
 require 'net/http'
 require 'uri'
 
-# Utility to fetch environment variables with helpful errors for Codemagic logs.
+# Utility to fetch environment variables with helpful errors for CI logs.
 def env!(name)
   value = ENV[name]
   raise "Missing required environment variable #{name}" if value.nil? || value.empty?
   value
 end
 
-# Handles the case where Codemagic stores the private key without PEM headers.
+# Handles the case where CI secrets may store the private key without PEM headers.
 def normalize_private_key(raw)
   return raw if raw.include?('-----BEGIN')
 

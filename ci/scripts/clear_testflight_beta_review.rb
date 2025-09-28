@@ -48,7 +48,7 @@ def build_token(private_key_pem, key_id, issuer_id)
   "#{signing_input}.#{signature_b64}"
 end
 
-# Handle Codemagic environment variables that may be Base64 without PEM headers.
+# Handle CI environment variables that may be Base64 without PEM headers.
 def normalize_private_key(raw)
   expanded = raw.include?('-----BEGIN') ? raw : Base64.decode64(raw)
   expanded.gsub("\n", "\n")
