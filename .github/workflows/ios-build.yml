@@ -22,14 +22,18 @@ jobs:
       - name: Install .NET MAUI workloads
         run: dotnet workload install maui ios
 
+      # Debug: show repo tree to verify
+      - name: List repo files
+        run: ls -R
+
       - name: Restore NuGet packages
-        run: dotnet restore BibleQuest/BibleQuestForKids/BibleQuestForKids.sln
+        run: dotnet restore BibleQuestForKids/BibleQuestForKids.sln
 
       - name: Build iOS app
-        run: dotnet build BibleQuest/BibleQuestForKids/BibleQuestForKids.sln -c Release -f:net9.0-ios /p:ArchiveOnBuild=true
+        run: dotnet build BibleQuestForKids/BibleQuestForKids.sln -c Release -f:net9.0-ios /p:ArchiveOnBuild=true
 
       - name: Publish iOS IPA
-        run: dotnet publish BibleQuest/BibleQuestForKids/BibleQuestForKids.sln -c Release -f:net9.0-ios /p:BuildIpa=true
+        run: dotnet publish BibleQuestForKids/BibleQuestForKids.sln -c Release -f:net9.0-ios /p:BuildIpa=true
 
       - name: Upload IPA to TestFlight
         uses: apple-actions/upload-testflight-build@v1
