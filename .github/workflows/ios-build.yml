@@ -13,12 +13,13 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      - name: Setup .NET 9
+      - name: Setup .NET 8 SDK
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 9.0.x
+          dotnet-version: 8.0.x
 
       - name: Install MAUI workloads
+        # Install the MAUI and iOS workloads needed for publishing.
         run: dotnet workload install maui ios
 
       - name: Configure NuGet sources
@@ -33,15 +34,28 @@ jobs:
         run: dotnet restore BibleQuestForKids/BibleQuestForKids.sln --no-cache --disable-parallel --verbosity detailed
 
       - name: Build iOS app
-        run: dotnet build BibleQuestForKids/BibleQuestForKids.sln -c Release -f:net9.0-ios /p:ArchiveOnBuild=true --verbosity detailed
+        run: >-
+          dotnet build BibleQuestForKids/BibleQuestForKids.csproj
+          -c Release
+          -f net8.0-ios
+          -p:ArchiveOnBuild=true
+          -p:RuntimeIdentifier=ios-arm64
+          --verbosity detailed
 
       - name: Publish iOS IPA
-        run: dotnet publish BibleQuestForKids/BibleQuestForKids.sln -c Release -f:net9.0-ios /p:BuildIpa=true --verbosity detailed
+        run: >-
+          dotnet publish BibleQuestForKids/BibleQuestForKids.csproj
+          -c Release
+          -f net8.0-ios
+          -p:RuntimeIdentifier=ios-arm64
+          -p:ArchiveOnBuild=true
+          -p:BuildIpa=true
+          --verbosity detailed
 
       - name: Upload IPA to TestFlight
         uses: apple-actions/upload-testflight-build@v1
         with:
-          app-path: BibleQuestForKids/bin/Release/net9.0-ios/ios-arm64/publish/*.ipa
+          app-path: BibleQuestForKids/bin/Release/net8.0-ios/ios-arm64/publish/*.ipa
           issuer-id: ${{ secrets.APPLE_ISSUER_ID }}
           api-key-id: ${{ secrets.APPLE_KEY_ID }}
           api-private-key: ${{ secrets.APPLE_PRIVATE_KEY }}
