@@ -29,7 +29,7 @@ jobs:
           node-version: 18
 
       - name: Install MAUI workloads
-        run: dotnet workload install maui-ios --skip-manifest-update
+        run: dotnet workload install maui ios --skip-manifest-update
 
       - name: Configure NuGet sources
         run: |
@@ -155,7 +155,7 @@ jobs:
           -p:CFBundleIdentifier=${{ env.APP_IDENTIFIER }}
           -p:ApplicationDisplayVersion=${{ env.APP_DISPLAY_VERSION }}
           -p:ApplicationVersion=${{ env.APP_BUILD_NUMBER }}
-          -p:CodesignKey=${{ env.CODESIGN_KEY }}
+          -p:CodesignKey="${{ env.CODESIGN_KEY }}"
           -p:CodesignProvision=${{ env.CODESIGN_PROVISION }}
           -p:CodesignTeamId=${{ secrets.TEAM_ID }}
           --verbosity detailed
