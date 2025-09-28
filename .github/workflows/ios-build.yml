@@ -53,13 +53,19 @@ jobs:
           dotnet nuget list source
 
       - name: List repo files for debugging
-        run: ls -R
+        run: |
+          echo "🔍 Repo root:"
+          ls -la
+          echo "🔍 BibleQuest folder:"
+          ls -la BibleQuest
+          echo "🔍 BibleQuestForKids folder:"
+          ls -la BibleQuest/BibleQuestForKids
 
       - name: Restore NuGet packages
-        run: dotnet restore BibleQuestForKids/BibleQuestForKids.csproj --no-cache --disable-parallel --verbosity detailed
+        run: dotnet restore BibleQuest/BibleQuestForKids/BibleQuestForKids.csproj --no-cache --disable-parallel --verbosity detailed
 
       - name: Build bundled web assets
-        working-directory: BibleQuestForKids/wwwroot
+        working-directory: BibleQuest/BibleQuestForKids/wwwroot
         run: |
           npm ci
           npm run build
@@ -68,12 +74,12 @@ jobs:
 
       - name: Strip development web assets
         run: |
-          rm -rf BibleQuestForKids/wwwroot/node_modules BibleQuestForKids/wwwroot/src
-          rm -f BibleQuestForKids/wwwroot/package*.json
+          rm -rf BibleQuest/BibleQuestForKids/wwwroot/node_modules BibleQuest/BibleQuestForKids/wwwroot/src
+          rm -f BibleQuest/BibleQuestForKids/wwwroot/package*.json
 
       - name: Guard dist assets exist
         run: |
-          DIST="BibleQuestForKids/wwwroot/dist"
+          DIST="BibleQuest/BibleQuestForKids/wwwroot/dist"
           if [ ! -s "$DIST/index.html" ]; then
             echo "dist/index.html missing. Run npm build before publishing." >&2
             exit 1
@@ -162,7 +168,7 @@ jobs:
 
       - name: Publish .NET MAUI iOS app
         run: >-
-          dotnet publish BibleQuestForKids/BibleQuestForKids.csproj
+          dotnet publish BibleQuest/BibleQuestForKids/BibleQuestForKids.csproj
           -c Release
           -f net8.0-ios
           -p:RuntimeIdentifier=ios-arm64
@@ -171,14 +177,14 @@ jobs:
           -p:CFBundleIdentifier=${{ env.APP_IDENTIFIER }}
           -p:ApplicationDisplayVersion=${{ env.APP_DISPLAY_VERSION }}
           -p:ApplicationVersion=${{ env.APP_BUILD_NUMBER }}
-          -p:CodesignKey="${{ env.CODESIGN_KEY }}"
+          -p:CodesignKey=${{ env.CODESIGN_KEY }}
           -p:CodesignProvision=${{ env.CODESIGN_PROVISION }}
           -p:CodesignTeamId=${{ secrets.TEAM_ID }}
           --verbosity detailed
 
       - name: Verify IPA contains dist assets
         run: |
-          IPA_PATH=$(find BibleQuestForKids/bin/Release/net8.0-ios/ios-arm64/publish -name '*.ipa' | head -1)
+          IPA_PATH=$(find BibleQuest/BibleQuestForKids/bin/Release/net8.0-ios/ios-arm64/publish -name '*.ipa' | head -1)
           unzip -q "$IPA_PATH" -d tmp
           APP_DIR=$(ls tmp/Payload)
           if [ ! -f "tmp/Payload/$APP_DIR/wwwroot/dist/index.html" ]; then
@@ -190,7 +196,7 @@ jobs:
       - name: Upload IPA to TestFlight
         uses: apple-actions/upload-testflight-build@v1
         with:
-          app-path: BibleQuestForKids/bin/Release/net8.0-ios/ios-arm64/publish/*.ipa
+          app-path: BibleQuest/BibleQuestForKids/bin/Release/net8.0-ios/ios-arm64/publish/*.ipa
           issuer-id: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
           api-key-id: ${{ secrets.APP_STORE_CONNECT_KEY_IDENTIFIER }}
           api-private-key: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
@@ -200,4 +206,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: BibleQuestForKids-ipa
-          path: BibleQuestForKids/bin/Release/net8.0-ios/ios-arm64/publish/*.ipa
+          path: BibleQuest/BibleQuestForKids/bin/Release/net8.0-ios/ios-arm64/publish/*.ipa
