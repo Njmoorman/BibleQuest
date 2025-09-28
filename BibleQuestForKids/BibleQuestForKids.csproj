@@ -10,26 +10,26 @@
     <Nullable>enable</Nullable>
     <SupportedOSPlatformVersion>13.0</SupportedOSPlatformVersion>
     <SupportedOrientations>Portrait Landscape</SupportedOrientations>
-    <!-- Bundle identifiers stay aligned for TestFlight and App Store uploads -->
   </PropertyGroup>
 
-  <!-- Platform identifiers -->
+  <!-- iOS bundle identifier -->
   <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0-ios'">
     <CFBundleIdentifier>app.biblequest</CFBundleIdentifier>
   </PropertyGroup>
 
+  <!-- Android app id -->
   <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0-android'">
     <ApplicationId>app.biblequest</ApplicationId>
   </PropertyGroup>
 
-  <!-- Android app icon -->
+  <!-- Android icons -->
   <ItemGroup Condition="'$(TargetFramework)' == 'net8.0-android'">
     <MauiIcon Include="Resources\AppIcon\appicon.svg"
               ForegroundFile="Resources\AppIcon\appiconfg.svg"
               Color="#1B365D" />
   </ItemGroup>
 
-  <!-- iOS app icons (base64 → PNG via Python script) -->
+  <!-- iOS icons (materialized via Python script) -->
   <ItemGroup Condition="'$(TargetFramework)' == 'net8.0-ios'">
     <IosAppIconBase64 Include="Platforms\iOS\Assets.xcassets\AppIcon.appiconset\*.base64" />
   </ItemGroup>
@@ -41,16 +41,15 @@
     <Exec Command="python3 &quot;$(MSBuildProjectDirectory)/Platforms/iOS/Assets.xcassets/AppIcon.appiconset/materialize_icons.py&quot;" />
   </Target>
 
-  <!-- Core dependencies -->
+  <!-- NuGet dependencies -->
   <ItemGroup>
     <PackageReference Include="Microsoft.Maui.Controls" Version="8.0.*" />
-    <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="8.0.*" />
   </ItemGroup>
 
-  <!-- Ship prebuilt Vite/Blazor hybrid output -->
+  <!-- Always package only the Vite-built assets -->
   <ItemGroup>
     <MauiAsset Include="wwwroot/dist/**/*"
-               LogicalName="wwwroot/%(RecursiveDir)%(Filename)%(Extension)" />
+               LogicalName="wwwroot/dist/%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 
 </Project>
