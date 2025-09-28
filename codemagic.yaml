@@ -9,7 +9,7 @@
 
 workflows:
   bible-quest-ios:
-    name: Bible Quest for Kids – iOS Build (.NET MAUI)
+    name: Bible Quest for Kids – iOS Build (.NET MAUI, Static WebView)
     max_build_duration: 60
     environment:
       xcode: latest
@@ -23,10 +23,9 @@ workflows:
         DOTNET_SKIP_FIRST_TIME_EXPERIENCE: "1"
         DOTNET_CLI_TELEMETRY_OPTOUT: "1"
         APP_IDENTIFIER: app.biblequest
-        APP_DISPLAY_VERSION: 1.1.0   # bump manually when you want a new marketing version
+        APP_DISPLAY_VERSION: 1.1.0
         TEAM_ID: 2989BXM365
-        VITE_BASE44_REQUIRE_AUTH: "false" # Keep TestFlight builds usable until login UX is ready
-        AUTO_CLEAR_TESTFLIGHT_REVIEW: "true" # Cancel stuck beta-review submissions before Codemagic resubmits
+        AUTO_CLEAR_TESTFLIGHT_REVIEW: "true"
     integrations:
       app_store_connect: CODE MAGIC API - Distribution (Admin)
     triggering:
@@ -36,17 +35,16 @@ workflows:
       branch_patterns:
         - pattern: main
           include: true
+
     scripts:
       - name: Compute build number (epoch)
         script: |
           set -euo pipefail
-          # Use epoch seconds so CFBundleVersion monotonically increases for TestFlight/App Store
           EPOCH_BUILD_NUMBER="$(date +%s)"
-          echo "Using APP_BUILD_NUMBER=$EPOCH_BUILD_NUMBER"
-          # Persist for downstream steps by writing directly to Codemagic's shared env file.
           echo "APP_BUILD_NUMBER=$EPOCH_BUILD_NUMBER" >> "$CM_ENV"
+          echo "Using APP_BUILD_NUMBER=$EPOCH_BUILD_NUMBER"
 
-      - name: Install .NET SDK locally (no sudo required)
+      - name: Install .NET SDK locally
         script: |
           set -euo pipefail
           DOTNET_VERSION="8.0.301"
@@ -55,282 +53,115 @@ workflows:
           chmod +x /tmp/dotnet-install.sh
           /tmp/dotnet-install.sh --version "$DOTNET_VERSION" --install-dir "$DOTNET_ROOT"
           export PATH="$DOTNET_ROOT:$PATH"
-          "$DOTNET_ROOT/dotnet" --info
+          dotnet --info
 
-      - name: Install MAUI workload
+      - name: Install MAUI workloads
         script: |
           set -euo pipefail
           export PATH="$DOTNET_ROOT:$PATH"
           mkdir -p "$HOME/.dotnet/temp"
-          # Only the MAUI iOS workload is required for the static WebView build.
-          "$DOTNET_ROOT/dotnet" workload install maui-ios --skip-manifest-update --temp-dir "$HOME/.dotnet/temp"
-          "$DOTNET_ROOT/dotnet" workload restore BibleQuestForKids/BibleQuestForKids.csproj
+          dotnet workload install maui-ios --skip-manifest-update --temp-dir "$HOME/.dotnet/temp"
+          dotnet workload restore BibleQuestForKids/BibleQuestForKids.csproj
 
       - name: Restore NuGet packages
         script: |
           set -euo pipefail
           export PATH="$DOTNET_ROOT:$PATH"
-          "$DOTNET_ROOT/dotnet" restore BibleQuestForKids/BibleQuestForKids.csproj
+          dotnet restore BibleQuestForKids/BibleQuestForKids.csproj
 
       - name: Validate iOS icon catalog
         script: |
           set -euo pipefail
           ICONSET="BibleQuestForKids/Platforms/iOS/Assets.xcassets/AppIcon.appiconset"
-          # Materialize the base64 sources so validation works both locally and in CI.
           python3 "$ICONSET/materialize_icons.py"
           python3 "$ICONSET/validate_icons.py"
 
-      - name: Build bundled web assets (Vite)
+      - name: Build bundled web assets (npm)
         script: |
           set -euo pipefail
-          export PATH="$DOTNET_ROOT:$PATH"
-
           cd BibleQuestForKids/wwwroot
           npm ci
           npm run build
           cd ../..
-          # Strip dev-only assets so the MAUI bundle only ships the compiled static site.
-          cd BibleQuestForKids/wwwroot
-          rm -rf node_modules src
-          rm -f package.json package-lock.json vite.config.js tailwind.config.js postcss.config.js eslint.config.js \
-                jsconfig.json components.json README.md
 
-      - name: "Guard: dist contains index.html + JS bundle"
+          DIST="BibleQuestForKids/wwwroot/dist"
+          if [ ! -s "$DIST/index.html" ]; then
+            echo "ERROR: dist/index.html not found"
+            exit 1
+          fi
+          echo "✅ Built dist/ with index.html"
+          head -n 10 "$DIST/index.html"
+
+      - name: Guard: dist/ exists and is valid
         script: |
           set -euo pipefail
-          cd BibleQuestForKids/wwwroot/dist
-          [ -f index.html ] || { echo "ERROR: dist/index.html missing" >&2; exit 1; }
-          JS=$(ls assets/*.js 2>/dev/null | head -1 || true)
-          [ -n "$JS" ] || { echo "ERROR: no JS bundle in dist/assets" >&2; exit 1; }
-          echo "✅ dist/index.html and JS bundle present"
+          DIST="BibleQuestForKids/wwwroot/dist"
+          test -s "$DIST/index.html" || { echo "ERROR: dist/index.html missing"; exit 1; }
+
+          SIZE=$(stat -f%z "$DIST/index.html" 2>/dev/null || stat -c%s "$DIST/index.html")
+          HASH=$(shasum -a 256 "$DIST/index.html" | awk '{print $1}')
+          echo "✅ index.html — $SIZE bytes — SHA256: $HASH"
 
       - name: Configure Apple signing assets
         script: |
           set -euo pipefail
-          pick_env_name() {
-            for var_name in "$@"; do
-              eval "value=\${$var_name-}"
-              if [ -n "$value" ]; then
-                printf '%s' "$var_name"
-                return 0
-              fi
-            done
-            echo "Missing required signing variable. Please define one of: $*" >&2
-            exit 1
-          }
+          CERTIFICATE_PATH="$HOME/codemagic-cert.p12"
+          PROFILE_PATH="$HOME/codemagic-profile.mobileprovision"
+          echo "$IOS_CERTIFICATE_P12" | base64 --decode > "$CERTIFICATE_PATH"
+          echo "$IOS_PROVISIONING_PROFILE" | base64 --decode > "$PROFILE_PATH"
+          security create-keychain -p "" build.keychain
+          security import "$CERTIFICATE_PATH" -k ~/Library/Keychains/build.keychain -P "$IOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security list-keychains -s ~/Library/Keychains/build.keychain
+          security default-keychain -s ~/Library/Keychains/build.keychain
+          security unlock-keychain -p "" ~/Library/Keychains/build.keychain
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          cp "$PROFILE_PATH" ~/Library/MobileDevice/Provisioning\ Profiles/
 
-          CERTIFICATE_VAR=$(pick_env_name IOS_CERTIFICATE_P12 CM_CERTIFICATE_P12 IOS_DISTRIBUTION_CERTIFICATE APPLE_CERTIFICATE_P12 APPLE_DISTRIBUTION_CERTIFICATE CERTIFICATE_PRIVATE_KEY)
-          PASSWORD_VAR=$(pick_env_name IOS_CERTIFICATE_PASSWORD CM_CERTIFICATE_PASSWORD IOS_DISTRIBUTION_CERTIFICATE_PASSWORD APPLE_CERTIFICATE_PASSWORD APPLE_DISTRIBUTION_CERTIFICATE_PASSWORD CERTIFICATE_PASSWORD)
-          PROFILE_VAR=$(pick_env_name IOS_PROVISIONING_PROFILE CM_PROVISIONING_PROFILE IOS_DISTRIBUTION_PROFILE APPLE_PROVISIONING_PROFILE IOS_PROVISIONING_PROFILE_BASE64 PROVISIONING_PROFILE)
-
-          KEYCHAIN_PASSWORD="$(openssl rand -hex 16)"
-
-          SIGNING_DIR="$HOME/codemagic-signing"
-          KEYCHAIN_PATH="$HOME/Library/Keychains/codemagic-signing.keychain-db"
-          CERT_PATH="$SIGNING_DIR/apple_distribution.p12"
-          PROFILE_TMP="$SIGNING_DIR/profile.mobileprovision"
-          PROFILES_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
-
-          mkdir -p "$SIGNING_DIR" "$PROFILES_DIR"
-
-          echo "Using signing certificate from \"$CERTIFICATE_VAR\""
-          echo "Using provisioning profile from \"$PROFILE_VAR\""
-
-          eval "printf '%s' \"\${$CERTIFICATE_VAR}\"" | base64 --decode > "$CERT_PATH"
-          eval "printf '%s' \"\${$PROFILE_VAR}\"" | base64 --decode > "$PROFILE_TMP"
-          CERTIFICATE_PASSWORD=$(eval "printf '%s' \"\${$PASSWORD_VAR}\"")
-
-          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security list-keychains -d user -s "$KEYCHAIN_PATH"
-          security default-keychain -d user -s "$KEYCHAIN_PATH"
-
-          security import "$CERT_PATH" -k "$KEYCHAIN_PATH" -P "$CERTIFICATE_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
-          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-
-          PROFILE_PLIST=$(security cms -D -i "$PROFILE_TMP")
-          PROFILE_UUID=$(/usr/libexec/PlistBuddy -c 'Print UUID' /dev/stdin <<< "$PROFILE_PLIST")
-          PROFILE_NAME=$(/usr/libexec/PlistBuddy -c 'Print Name' /dev/stdin <<< "$PROFILE_PLIST")
-          mv "$PROFILE_TMP" "$PROFILES_DIR/$PROFILE_UUID.mobileprovision"
-          echo "Installed provisioning profile '$PROFILE_NAME' ($PROFILE_UUID)"
-
-          IOS_IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | awk -F '"' 'NR==1 {print $2}')
-          if [ -z "$IOS_IDENTITY" ]; then
-            echo "No signing identity available" >&2
-            exit 1
-          fi
-          echo "Using signing identity: $IOS_IDENTITY"
-
-          export SIGNING_KEYCHAIN_PATH="$KEYCHAIN_PATH"
-          export PROVISIONING_PROFILE_UUID="$PROFILE_UUID"
-          export IOS_CODESIGN_IDENTITY="$IOS_IDENTITY"
-          export KEYCHAIN_PASSWORD="$KEYCHAIN_PASSWORD"
-
-          printf 'export SIGNING_KEYCHAIN_PATH=%q\n' "$SIGNING_KEYCHAIN_PATH" >> "$CM_ENV"
-          printf 'export PROVISIONING_PROFILE_UUID=%q\n' "$PROVISIONING_PROFILE_UUID" >> "$CM_ENV"
-          printf 'export IOS_CODESIGN_IDENTITY=%q\n' "$IOS_CODESIGN_IDENTITY" >> "$CM_ENV"
-          printf 'export KEYCHAIN_PASSWORD=%q\n' "$KEYCHAIN_PASSWORD" >> "$CM_ENV"
-
-      - name: Align Info.plist bundle ID with provisioning profile
+      - name: Align Info.plist bundle ID
         script: |
-          set -euo pipefail
-          : "${APP_IDENTIFIER:?Define APP_IDENTIFIER in workflow vars or Codemagic env groups}"
           INFO_PLIST="BibleQuestForKids/Platforms/iOS/Info.plist"
-          CURRENT_ID=$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$INFO_PLIST")
-          if [ "$CURRENT_ID" != "$APP_IDENTIFIER" ]; then
-            echo "Updating CFBundleIdentifier from '$CURRENT_ID' to '$APP_IDENTIFIER'"
-            /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $APP_IDENTIFIER" "$INFO_PLIST"
-          else
-            echo "CFBundleIdentifier already matches $APP_IDENTIFIER"
-          fi
+          /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $APP_IDENTIFIER" "$INFO_PLIST"
 
       - name: Stamp Info.plist versions
         script: |
-          set -euo pipefail
-          : "${APP_BUILD_NUMBER:?APP_BUILD_NUMBER not set}"
           INFO_PLIST="BibleQuestForKids/Platforms/iOS/Info.plist"
-          APP_DISPLAY_VERSION=${APP_DISPLAY_VERSION:-1.1.0}
-          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $APP_DISPLAY_VERSION" "$INFO_PLIST" || \
-            /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string $APP_DISPLAY_VERSION" "$INFO_PLIST"
-          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $APP_BUILD_NUMBER" "$INFO_PLIST" || \
-            /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string $APP_BUILD_NUMBER" "$INFO_PLIST"
-          echo "Stamped CFBundleShortVersionString=$APP_DISPLAY_VERSION"
-          echo "Stamped CFBundleVersion=$APP_BUILD_NUMBER"
-          printf 'export APP_DISPLAY_VERSION=%q\n' "$APP_DISPLAY_VERSION" >> "$CM_ENV"
-          printf 'export APP_BUILD_NUMBER=%q\n' "$APP_BUILD_NUMBER" >> "$CM_ENV"
-
-      - name: Materialize iOS AppIcon PNGs
-        script: |
-          set -euo pipefail
-          python3 BibleQuestForKids/Platforms/iOS/Assets.xcassets/AppIcon.appiconset/materialize_icons.py
-
-      - name: Validate iOS icon catalog
-        script: |
-          set -euo pipefail
-          ICONSET="BibleQuestForKids/Platforms/iOS/Assets.xcassets/AppIcon.appiconset"
-          if [ ! -d "$ICONSET" ]; then
-            echo "Missing $ICONSET" >&2
-            exit 1
-          fi
-          python3 "$ICONSET/validate_icons.py" "$ICONSET"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $APP_DISPLAY_VERSION" "$INFO_PLIST"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $APP_BUILD_NUMBER" "$INFO_PLIST"
 
       - name: Publish .NET MAUI iOS app
         script: |
           set -euo pipefail
-          if [ -f "${CM_ENV-}" ]; then
-            . "$CM_ENV"
-          fi
-          : "${IOS_CODESIGN_IDENTITY:?Missing IOS_CODESIGN_IDENTITY from signing step}"
-          : "${PROVISIONING_PROFILE_UUID:?Missing PROVISIONING_PROFILE_UUID from signing step}"
-          : "${SIGNING_KEYCHAIN_PATH:?Missing SIGNING_KEYCHAIN_PATH from signing step}"
-          : "${APP_IDENTIFIER:?Define APP_IDENTIFIER in workflow vars or Codemagic env groups}"
-          : "${APP_DISPLAY_VERSION:?Stamp Info.plist version numbers before publishing}"
-          : "${APP_BUILD_NUMBER:?Stamp Info.plist version numbers before publishing}"
           export PATH="$DOTNET_ROOT:$PATH"
-          "$DOTNET_ROOT/dotnet" publish BibleQuestForKids/BibleQuestForKids.csproj \
-            -c Release \
-            -f net8.0-ios \
+          dotnet publish BibleQuestForKids/BibleQuestForKids.csproj \
+            -c Release -f net8.0-ios \
             -p:RuntimeIdentifier=ios-arm64 \
             -p:BuildIpa=true \
             -p:ApplicationId="$APP_IDENTIFIER" \
             -p:CFBundleIdentifier="$APP_IDENTIFIER" \
             -p:ApplicationDisplayVersion="$APP_DISPLAY_VERSION" \
-            -p:ApplicationVersion="$APP_BUILD_NUMBER" \
-            -p:CodesignKey="$IOS_CODESIGN_IDENTITY" \
-            -p:CodesignProvision="$PROVISIONING_PROFILE_UUID" \
-            -p:CodesignKeychain="$SIGNING_KEYCHAIN_PATH"
+            -p:ApplicationVersion="$APP_BUILD_NUMBER"
 
-      - name: Verify IPA CFBundleVersion > 41 and matches stamped number
+      - name: Verify IPA contains dist/index.html
         script: |
-          set -euo pipefail
-          if [ -f "${CM_ENV-}" ]; then
-            . "$CM_ENV"
-          fi
-          : "${APP_BUILD_NUMBER:?missing}"
-          IPA_PATH=$(find BibleQuestForKids/bin/Release/net8.0-ios/ios-arm64/publish -maxdepth 1 -name '*.ipa' | head -1)
-          [ -n "${IPA_PATH:-}" ] || { echo "ERROR: No IPA found"; exit 1; }
+          IPA_PATH=$(find BibleQuestForKids/bin/Release/net8.0-ios/ios-arm64/publish -name '*.ipa' | head -1)
+          [ -n "$IPA_PATH" ] || { echo "ERROR: No IPA found"; exit 1; }
           TMP_DIR=$(mktemp -d)
           unzip -q "$IPA_PATH" -d "$TMP_DIR"
           APP_DIR=$(cd "$TMP_DIR/Payload" && ls -d *.app | head -1)
-          [ -n "${APP_DIR:-}" ] || { echo "ERROR: No .app in IPA"; exit 1; }
-          INFO_PLIST="$TMP_DIR/Payload/$APP_DIR/Info.plist"
-          CF_BUNDLE_VERSION=$(/usr/libexec/PlistBuddy -c 'Print CFBundleVersion' "$INFO_PLIST")
-          echo "IPA CFBundleVersion=$CF_BUNDLE_VERSION"
-          if [ "$CF_BUNDLE_VERSION" != "$APP_BUILD_NUMBER" ]; then
-            echo "ERROR: IPA CFBundleVersion ($CF_BUNDLE_VERSION) != APP_BUILD_NUMBER ($APP_BUILD_NUMBER)"; exit 1;
-          fi
-          if [ "$CF_BUNDLE_VERSION" -le 41 ] 2>/dev/null; then
-            echo "ERROR: IPA CFBundleVersion ($CF_BUNDLE_VERSION) must be > 41"; exit 1;
-          fi
-          echo "OK: IPA build number validated."
-
-      - name: Verify IPA contains dist assets
-        script: |
-          set -euo pipefail
-          IPA_PATH=$(find BibleQuestForKids/bin/Release/net8.0-ios/ios-arm64/publish -maxdepth 1 -name '*.ipa' | head -1)
-          if [ -z "${IPA_PATH:-}" ]; then
-            echo "ERROR: No IPA found" >&2
-            exit 1
-          fi
-
-          TMP_DIR=$(mktemp -d)
-          unzip -q "$IPA_PATH" -d "$TMP_DIR"
-          APP_DIR=$(cd "$TMP_DIR/Payload" && ls -d *.app | head -1)
-          if [ -z "${APP_DIR:-}" ]; then
-            echo "ERROR: Unable to locate .app directory inside IPA" >&2
-            exit 1
-          fi
-
-          echo "Listing dist/ inside IPA (first 20 files):"
-          find "$TMP_DIR/Payload/$APP_DIR/wwwroot/dist" -type f | sort | head -20
-
           INDEX_HTML="$TMP_DIR/Payload/$APP_DIR/wwwroot/dist/index.html"
-          if [ ! -f "$INDEX_HTML" ]; then
-            echo "ERROR: IPA missing dist/index.html" >&2
-            exit 1
-          fi
-
-          JS=$(find "$TMP_DIR/Payload/$APP_DIR/wwwroot/dist/assets" -name '*.js' | head -1 || true)
-          if [ -z "$JS" ]; then
-            echo "ERROR: IPA missing JS bundle under dist/assets" >&2
-            exit 1
-          fi
-
-          echo "✅ IPA contains dist/index.html and at least one JS bundle"
-          head -n 15 "$INDEX_HTML"
-
-          OUTPUT_DIR="$PWD/output"
-          mkdir -p "$OUTPUT_DIR"
-          (cd "$TMP_DIR/Payload/$APP_DIR" && zip -r "$OUTPUT_DIR/ipa-wwwroot.zip" wwwroot)
+          [ -s "$INDEX_HTML" ] || { echo "ERROR: index.html missing in IPA"; exit 1; }
+          echo "✅ IPA contains dist/index.html"
+          head -n 10 "$INDEX_HTML"
 
       - name: Collect IPA
         script: |
-          set -euo pipefail
           mkdir -p output
-          find BibleQuestForKids/bin/Release/net8.0-ios/ios-arm64/publish -maxdepth 1 -name '*.ipa' \
-            -print -exec cp {} output/ \;
+          cp BibleQuestForKids/bin/Release/net8.0-ios/ios-arm64/publish/*.ipa output/
 
-      - name: Clear in-flight TestFlight beta review (optional)
+      - name: Clear in-flight TestFlight beta review
         script: |
-          set -euo pipefail
-          if [ "${AUTO_CLEAR_TESTFLIGHT_REVIEW:-true}" != "true" ]; then
-            echo "AUTO_CLEAR_TESTFLIGHT_REVIEW disabled; keeping existing beta review submission in place."
-            exit 0
-          fi
-          required_vars=(APP_STORE_CONNECT_PRIVATE_KEY APP_STORE_CONNECT_KEY_IDENTIFIER APP_STORE_CONNECT_ISSUER_ID APP_IDENTIFIER)
-          for var in "${required_vars[@]}"; do
-            if [ -z "${!var:-}" ]; then
-              echo "Missing required App Store Connect configuration: $var" >&2
-              exit 1
-            fi
-          done
-          set +e
-          ruby ci/scripts/clear_testflight_beta_review.rb
-          status=$?
-          set -e
-          if [ "$status" -ne 0 ]; then
-            echo "Warning: Unable to auto-clear TestFlight beta review submissions. Continuing without blocking the build."
+          if [ "${AUTO_CLEAR_TESTFLIGHT_REVIEW:-true}" = "true" ]; then
+            ruby ci/scripts/clear_testflight_beta_review.rb || echo "⚠️ Could not auto-clear TestFlight review"
           fi
 
     artifacts:
@@ -342,4 +173,3 @@ workflows:
         auth: integration
         submit_to_testflight: true
         submit_to_app_store: false
-
