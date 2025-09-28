@@ -159,7 +159,7 @@ workflows:
 
             if html != original:
                 index_path.write_text(html, encoding="utf-8")
-PY
+          PY
 
           echo "✅ Ensured dist/index.html is wired for the hybrid runtime"
           head -n 20 "$INDEX_FILE"
