@@ -141,10 +141,20 @@ workflows:
             "$HOME/.nuget/packages/microsoft.aspnetcore.components.webview.maui"
           )
 
+          # .NET workloads keep packs outside of the NuGet cache on macOS build agents.
+          # Search those pack locations as a fallback so we can always source blazor.webview.js.
+          if [ -d "$DOTNET_ROOT/packs" ]; then
+            PACK_SRC=$(find "$DOTNET_ROOT/packs" -path "*Microsoft.AspNetCore.Components.WebView.Maui*" \
+              -name blazor.webview.js 2>/dev/null | sort | tail -1 || true)
+            if [ -n "$PACK_SRC" ]; then
+              SEARCH_DIRS+=("$(dirname "$PACK_SRC")")
+            fi
+          fi
+
           SRC=""
           for dir in "${SEARCH_DIRS[@]}"; do
             if [ -d "$dir" ]; then
-              SRC=$(find "$dir" -type f -name blazor.webview.js | sort | tail -1 || true)
+              SRC=$(find "$dir" -type f -name blazor.webview.js 2>/dev/null | sort | tail -1 || true)
               if [ -n "$SRC" ]; then
                 break
               fi
