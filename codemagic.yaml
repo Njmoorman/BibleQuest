@@ -67,6 +67,14 @@ workflows:
           "$DOTNET_ROOT/dotnet" workload install wasm-tools --skip-manifest-update --temp-dir "$HOME/.dotnet/temp"
           "$DOTNET_ROOT/dotnet" workload restore BibleQuestForKids/BibleQuestForKids.csproj
 
+      - name: Validate iOS icon catalog
+        script: |
+          set -euo pipefail
+          ICONSET="BibleQuestForKids/Platforms/iOS/Assets.xcassets/AppIcon.appiconset"
+          # Materialize the base64 sources so validation works both locally and in CI.
+          python3 "$ICONSET/materialize_icons.py"
+          python3 "$ICONSET/validate_icons.py"
+
       - name: Build bundled web assets (npm + Blazor runtime)
         script: |
           set -euo pipefail
