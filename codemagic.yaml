@@ -131,6 +131,24 @@ workflows:
 
           rm -f "${INDEX_FILE}.bak"
 
+      - name: Copy Blazor Hybrid runtime (blazor.webview.js)
+        script: |
+          set -euo pipefail
+          export PATH="$DOTNET_ROOT:$PATH"
+
+          SRC=$(find "$DOTNET_ROOT/../.nuget/packages/microsoft.aspnetcore.components.webview.maui" -type f -name blazor.webview.js | sort | tail -1 || true)
+          if [ -z "$SRC" ]; then
+            echo "ERROR: Could not locate blazor.webview.js in NuGet cache"
+            exit 1
+          fi
+
+          DEST_DIR="BibleQuestForKids/wwwroot/dist/_framework"
+          mkdir -p "$DEST_DIR"
+          cp "$SRC" "$DEST_DIR/"
+
+          echo "✅ Copied blazor.webview.js into dist/_framework from $SRC"
+          ls -l "$DEST_DIR" | grep blazor.webview.js
+
       - name: "Guard: Blazor files exist after npm build"
         script: |
           set -euo pipefail
