@@ -27,15 +27,15 @@ jobs:
 
       # 4. Restore NuGet
       - name: Restore NuGet packages
-        run: dotnet restore BibleQuestForKids.sln
+        run: dotnet restore BibleQuest/BibleQuestForKids/BibleQuestForKids.sln
 
       # 5. Build iOS App
       - name: Build iOS app
-        run: dotnet build BibleQuestForKids.sln -c Release -f:net9.0-ios /p:ArchiveOnBuild=true
+        run: dotnet build BibleQuest/BibleQuestForKids/BibleQuestForKids.sln -c Release -f:net9.0-ios /p:ArchiveOnBuild=true
 
       # 6. Publish IPA
       - name: Publish iOS IPA
-        run: dotnet publish BibleQuestForKids.sln -c Release -f:net9.0-ios /p:BuildIpa=true
+        run: dotnet publish BibleQuest/BibleQuestForKids/BibleQuestForKids.sln -c Release -f:net9.0-ios /p:BuildIpa=true
 
       # 7. Upload to TestFlight
       - name: Upload IPA to TestFlight
