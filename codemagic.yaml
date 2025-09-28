@@ -106,34 +106,46 @@ workflows:
           rm -f package.json package-lock.json vite.config.js tailwind.config.js postcss.config.js eslint.config.js \
             jsconfig.json components.json README.md
 
+      - name: Patch dist/index.html for hybrid runtime
+        script: |
+          set -euo pipefail
+          DIST="BibleQuestForKids/wwwroot/dist/index.html"
+
+          # Remove stale WASM references that break Blazor Hybrid bootstrap
+          sed -i.bak '/_framework\/blazor.boot.json/d' "$DIST" || true
+          sed -i.bak '/_framework\/dotnet.js/d' "$DIST" || true
+
+          # Inject BlazorWebView loader if the Vite build didn't include it yet
+          if ! grep -q "blazor.webview.js" "$DIST"; then
+            echo '<script src="_framework/blazor.webview.js" autostart="false"></script>' >> "$DIST"
+          fi
+
+          rm -f "${DIST}.bak"
+
+          echo "✅ Patched $DIST for Blazor Hybrid runtime"
+          head -n 10 "$DIST"
+
       - name: "Guard: Blazor files exist after npm build"
         script: |
           set -euo pipefail
           cd BibleQuestForKids/wwwroot/dist
 
-          REQUIRED_FILES=("index.html" "_framework/blazor.boot.json" "_framework/dotnet.js")
-
-          for f in "${REQUIRED_FILES[@]}"; do
-            if [ ! -f "$f" ]; then
-              echo "ERROR: Missing required Blazor file: $f"
-              exit 1
-            fi
-            SIZE=$(stat -f%z "$f" 2>/dev/null || stat -c%s "$f")
-            HASH=$(shasum -a 256 "$f" | awk '{print $1}')
-            echo "✅ $f — $SIZE bytes — SHA256: $HASH"
-          done
-
-          # Verify runtime is actually referenced in index.html
-          if ! grep -q "blazor.boot.json" index.html; then
-            echo "ERROR: index.html does not reference blazor.boot.json"
-            exit 1
-          fi
-          if ! grep -q "dotnet.js" index.html; then
-            echo "ERROR: index.html does not reference dotnet.js"
+          if grep -q "blazor.boot.json" index.html; then
+            echo "ERROR: index.html still references blazor.boot.json"
             exit 1
           fi
 
-          echo "✅ index.html contains references to blazor.boot.json and dotnet.js"
+          if grep -q "dotnet.js" index.html; then
+            echo "ERROR: index.html still references dotnet.js"
+            exit 1
+          fi
+
+          if ! grep -q "blazor.webview.js" index.html; then
+            echo "ERROR: index.html missing hybrid runtime reference"
+            exit 1
+          fi
+
+          echo "✅ index.html references blazor.webview.js"
           echo "Preview of dist/index.html (first 10 lines):"
           head -n 10 index.html
 

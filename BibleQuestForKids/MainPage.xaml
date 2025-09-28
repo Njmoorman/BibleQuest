@@ -1,24 +1,13 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
-             x:Class="BibleQuestForKids.MainPage"
-             Title="Bible Quest Test Harness">
-    <ScrollView>
-        <VerticalStackLayout Padding="24" Spacing="16" VerticalOptions="Center">
-            <Label Text="Bible Quest for Kids"
-                   FontSize="32"
-                   HorizontalTextAlignment="Center"
-                   SemanticProperties.HeadingLevel="Level1" />
-            <Label Text="This basic page helps us validate Codemagic builds before reconnecting the hybrid React UI."
-                   FontSize="18"
-                   HorizontalTextAlignment="Center"
-                   LineBreakMode="WordWrap" />
-            <Button Text="Tap to confirm"
-                    Clicked="OnConfirmTapped"
-                    SemanticProperties.Hint="Tap to verify touch input works." />
-            <Label x:Name="StatusLabel"
-                   Text="Waiting for interaction..."
-                   HorizontalTextAlignment="Center" />
-        </VerticalStackLayout>
-    </ScrollView>
+             xmlns:blazor="clr-namespace:Microsoft.AspNetCore.Components.WebView.Maui;assembly=Microsoft.AspNetCore.Components.WebView.Maui"
+             xmlns:local="clr-namespace:BibleQuestForKids"
+             x:Class="BibleQuestForKids.MainPage">
+
+    <blazor:BlazorWebView HostPage="wwwroot/dist/index.html">
+        <blazor:BlazorWebView.RootComponents>
+            <blazor:RootComponent Selector="#app" ComponentType="{x:Type local:App}" />
+        </blazor:BlazorWebView.RootComponents>
+    </blazor:BlazorWebView>
 </ContentPage>
