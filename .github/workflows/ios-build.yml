@@ -93,7 +93,7 @@ jobs:
 
       - name: Restore NuGet packages
         run: |
-          set -euo pipefail
+          set -euo pipefill
           dotnet restore BibleQuestForKids/BibleQuestForKids.csproj --no-cache --disable-parallel
           echo '== Restored package cache snapshot =='
           du -sh ~/.nuget/packages || true
@@ -211,19 +211,101 @@ jobs:
           echo 'Current keychain identities:'
           security find-identity -v -p codesigning || true
 
-      - name: Debug provisioning profile vs expected bundle id
+      # ======= DEBUGGING HOOKS =======
+
+      - name: Print Info.plist (source)
         run: |
-          set -euo pipefail
+          echo '== Platforms/iOS/Info.plist (raw) =='
+          plutil -p BibleQuestForKids/Platforms/iOS/Info.plist || cat BibleQuestForKids/Platforms/iOS/Info.plist
+
+      - name: Inject a one-off MSBuild target to print identifiers
+        run: |
+          cat > Directory.Build.targets <<'EOF'
+          <Project>
+            <Target Name="PrintMauiProps">
+              <Message Text="== MAUI/iOS identifier properties (evaluated) ==" Importance="High" />
+              <Message Text="CFBundleIdentifier: $(CFBundleIdentifier)" Importance="High" />
+              <Message Text="BundleIdentifier : $(BundleIdentifier)" Importance="High" />
+              <Message Text="AppBundleId      : $(AppBundleId)" Importance="High" />
+              <Message Text="ApplicationId    : $(ApplicationId)" Importance="High" />
+              <Message Text="AssemblyName     : $(AssemblyName)" Importance="High" />
+              <Message Text="TargetFramework  : $(TargetFramework)" Importance="High" />
+              <Message Text="RuntimeIdentifier: $(RuntimeIdentifier)" Importance="High" />
+            </Target>
+          </Project>
+          EOF
+
+      - name: Show evaluated MSBuild properties
+        run: |
+          dotnet msbuild BibleQuestForKids/BibleQuestForKids.csproj \
+            -t:PrintMauiProps \
+            -p:TargetFramework=net8.0-ios \
+            -p:RuntimeIdentifier=ios-arm64 \
+            -p:BundleIdentifier=${{ env.APP_IDENTIFIER }} \
+            -p:CFBundleIdentifier=${{ env.APP_IDENTIFIER }} \
+            -p:AppBundleId=${{ env.APP_IDENTIFIER }} \
+            -v:m
+
+      - name: Build once to generate processed Info.plist (expect failure is okay)
+        continue-on-error: true
+        run: |
+          dotnet build BibleQuestForKids/BibleQuestForKids.csproj \
+            -c Release -f net8.0-ios -p:RuntimeIdentifier=ios-arm64 -v:m
+
+      - name: Locate and print processed Info.plist (obj/)
+        run: |
+          echo '== Searching obj/ for processed Info.plist =='
+          find BibleQuestForKids/obj -type f -name Info.plist | head -n 20 || true
+          CANDIDATE=$(find BibleQuestForKids/obj -type f -name Info.plist | head -n 1 || true)
+          if [ -n "$CANDIDATE" ]; then
+            echo "== Processed Info.plist candidate: $CANDIDATE =="
+            plutil -p "$CANDIDATE" || cat "$CANDIDATE" || true
+            /usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$CANDIDATE" || true
+          else
+            echo 'Processed Info.plist not found yet.'
+          fi
+
+      - name: Compare profile vs expected bundle id
+        run: |
           TMP_PLIST="$RUNNER_TEMP/profile.plist"
-          security cms -D -i "$HOME/Library/MobileDevice/Provisioning Profiles/${{ env.APP_IDENTIFIER }}.mobileprovision" > "$TMP_PLIST" || true
+          security cms -D -i "$HOME/Library/MobileDevice/Provisioning Profiles/${{ env.APP_IDENTIFIER }}.mobileprovision" > "$TMP_PLIST"
           echo "== Profile UUID / Name =="
-          /usr/libexec/PlistBuddy -c 'Print UUID' "$TMP_PLIST" || true
-          /usr/libexec/PlistBuddy -c 'Print Name' "$TMP_PLIST" || true
-          echo "== application-identifier =="
-          /usr/libexec/PlistBuddy -c 'Print Entitlements:application-identifier' "$TMP_PLIST" || true
+          /usr/libexec/PlistBuddy -c 'Print UUID' "$TMP_PLIST"
+          /usr/libexec/PlistBuddy -c 'Print Name' "$TMP_PLIST"
+          echo "== Entitlements:application-identifier =="
+          /usr/libexec/PlistBuddy -c 'Print Entitlements:application-identifier' "$TMP_PLIST"
           echo "== TeamIdentifier =="
-          /usr/libexec/PlistBuddy -c 'Print TeamIdentifier:0' "$TMP_PLIST" || true
+          /usr/libexec/PlistBuddy -c 'Print TeamIdentifier:0' "$TMP_PLIST"
           echo "== Expecting bundle id = ${{ env.APP_IDENTIFIER }} =="
+
+      - name: Publish with binlog (diagnostic attempt)
+        continue-on-error: true
+        run: |
+          dotnet publish BibleQuestForKids/BibleQuestForKids.csproj \
+            -c Release \
+            -f net8.0-ios \
+            -p:RuntimeIdentifier=ios-arm64 \
+            -p:ArchiveOnBuild=true \
+            -p:ApplicationId=${{ env.APP_IDENTIFIER }} \
+            -p:BundleIdentifier=${{ env.APP_IDENTIFIER }} \
+            -p:CFBundleIdentifier=${{ env.APP_IDENTIFIER }} \
+            -p:AppBundleId=${{ env.APP_IDENTIFIER }} \
+            -p:ApplicationDisplayVersion=${{ env.APP_DISPLAY_VERSION }} \
+            -p:ApplicationVersion=${{ env.APP_BUILD_NUMBER }} \
+            -p:CodesignKey="${{ env.CODESIGN_KEY }}" \
+            -p:CodesignProvision="${{ env.CODESIGN_PROVISION }}" \
+            -p:CodesignTeamId=${{ env.TEAM_ID }} \
+            -bl:"$RUNNER_TEMP/publish.binlog" \
+            -v:m
+
+      - name: Upload MSBuild binlog
+        uses: actions/upload-artifact@v4
+        with:
+          name: msbuild-binlog
+          path: ${{ runner.temp }}/publish.binlog
+          if-no-files-found: warn
+
+      # ======= FINAL PUBLISH (fails the job if broken) =======
 
       - name: Publish .NET MAUI iOS app
         run: >-
@@ -235,6 +317,7 @@ jobs:
           -p:ApplicationId=${{ env.APP_IDENTIFIER }}
           -p:BundleIdentifier=${{ env.APP_IDENTIFIER }}
           -p:CFBundleIdentifier=${{ env.APP_IDENTIFIER }}
+          -p:AppBundleId=${{ env.APP_IDENTIFIER }}
           -p:ApplicationDisplayVersion=${{ env.APP_DISPLAY_VERSION }}
           -p:ApplicationVersion=${{ env.APP_BUILD_NUMBER }}
           -p:CodesignKey="${{ env.CODESIGN_KEY }}"
