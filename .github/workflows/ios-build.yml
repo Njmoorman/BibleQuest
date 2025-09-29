@@ -38,7 +38,8 @@ jobs:
         run: dotnet nuget remove source nuget-org || true
 
       - name: Add nuget.org source (idempotent)
-        run: dotnet nuget add source --name nuget-org --source https://api.nuget.org/v3/index.json
+        # dotnet nuget add source expects the feed URL as a positional argument.
+        run: dotnet nuget add source https://api.nuget.org/v3/index.json --name nuget-org
 
       - name: Verify configured NuGet sources
         run: dotnet nuget list source
