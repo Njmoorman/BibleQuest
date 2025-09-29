@@ -19,35 +19,43 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # ✅ Pin the SDK so the runner never uses 9.0
+      - name: Pin .NET SDK via global.json
+        run: |
+          set -euo pipefail
+          cat > global.json <<'EOF'
+          {
+            "sdk": {
+              "version": "8.0.301",
+              "rollForward": "disable"
+            }
+          }
+          EOF
+          echo 'Wrote global.json to force .NET 8.0.301'
+
+      - name: Setup .NET SDK (8.0.301)
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Verify pinned .NET SDK
+        run: |
+          set -euo pipefail
+          dotnet --info | sed -n '1,80p'
+          echo 'dotnet version:'
+          dotnet --version
+
       - name: Capture runner diagnostics
         run: |
           set -euo pipefail
-          echo '== System information =='
-          uname -a
-          sw_vers
-          echo "Xcode version: $(xcodebuild -version | paste -sd ' ' -)"
-          echo 'Available SDKs:'
+          echo "Xcode: $(xcodebuild -version | paste -sd ' ' -)"
           xcodebuild -showsdks
 
       - name: Discover key project files
         run: |
           set -euo pipefail
-          echo '== .csproj files =='
           find . -maxdepth 5 -name '*.csproj' -print
-          echo '== .sln files =='
           find . -maxdepth 5 -name '*.sln' -print
-
-      - name: Setup .NET SDK
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
-
-      - name: Log .NET environment
-        run: |
-          set -euo pipefail
-          dotnet --info
-          dotnet --list-sdks
-          dotnet --list-runtimes
 
       - name: Setup Node.js for web assets
         uses: actions/setup-node@v4
@@ -56,7 +64,8 @@ jobs:
 
       - name: Build bundled web assets
         working-directory: BibleQuestForKids/wwwroot
-        env: { CI: 'true' }
+        env:
+          CI: 'true'
         run: |
           set -euo pipefail
           npm ci
@@ -78,6 +87,31 @@ jobs:
           test -s "$DIST/index.html"
           echo '✅ Found dist/index.html'
           head -n 8 "$DIST/index.html"
+
+      - name: Ensure NuGet.org feed is available
+        run: |
+          set -euo pipefail
+          if ! dotnet nuget list source | grep -q 'https://api.nuget.org/v3/index.json'; then
+            dotnet nuget add source https://api.nuget.org/v3/index.json -n nuget-org
+          fi
+          dotnet nuget list source
+
+      - name: Install required MAUI workloads (for .NET 8)
+        run: |
+          set -euo pipefail
+          dotnet workload install maui-ios --skip-manifest-update
+          dotnet workload list
+
+      - name: Restore workloads declared by the project
+        run: |
+          set -euo pipefail
+          dotnet workload restore BibleQuestForKids/BibleQuestForKids.csproj
+
+      - name: Restore NuGet packages
+        run: |
+          set -euo pipefail
+          dotnet restore BibleQuestForKids/BibleQuestForKids.csproj --no-cache --disable-parallel
+          du -sh ~/.nuget/packages || true
 
       - name: Resolve build number
         id: resolve-build
@@ -132,7 +166,7 @@ jobs:
 
           {
             echo "CODESIGN_KEY=$CODESIGN_COMMON_NAME"
-            echo "CODESIGN_PROVISION=$PROFILE_UUID"
+            echo "CODESIGN_PROVISION=$PROFILE_UUID"       # MAUI expects Name/UUID, not a path
             echo "CODESIGN_PROVISION_NAME=$PROFILE_NAME"
             echo "TEAM_ID=$TEAM_ID"
           } >> "$GITHUB_ENV"
@@ -152,7 +186,6 @@ jobs:
           cat > Directory.Build.props <<'EOF'
           <Project>
             <PropertyGroup>
-              <!-- All four used by various iOS/MAUI targets -->
               <ApplicationId>$(BUNDLE_ID)</ApplicationId>
               <BundleIdentifier>$(BUNDLE_ID)</BundleIdentifier>
               <CFBundleIdentifier>$(BUNDLE_ID)</CFBundleIdentifier>
@@ -161,12 +194,6 @@ jobs:
           </Project>
           EOF
           echo 'Wrote Directory.Build.props to pin identifiers.'
-
-      # 🔎 Quick visibility into evaluated values (should all be app.biblequest)
-      - name: Print Info.plist (source)
-        run: |
-          set -euo pipefail
-          plutil -p BibleQuestForKids/Platforms/iOS/Info.plist || cat BibleQuestForKids/Platforms/iOS/Info.plist
 
       - name: Inject a one-off MSBuild target to print identifiers
         run: |
@@ -183,7 +210,7 @@ jobs:
           </Project>
           EOF
 
-      - name: Show evaluated MSBuild properties
+      - name: Show evaluated MSBuild properties (should be app.biblequest)
         run: |
           set -euo pipefail
           dotnet msbuild BibleQuestForKids/BibleQuestForKids.csproj \
@@ -193,7 +220,7 @@ jobs:
             -p:RuntimeIdentifier=ios-arm64 \
             -v:m
 
-      # 📦 Publish (ArchiveOnBuild => IPA)
+      # 📦 Publish (ArchiveOnBuild => IPA) with binlog
       - name: Publish .NET MAUI iOS app
         run: >-
           dotnet publish BibleQuestForKids/BibleQuestForKids.csproj
