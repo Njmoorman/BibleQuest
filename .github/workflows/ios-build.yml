@@ -31,12 +31,17 @@ jobs:
       - name: Install MAUI workloads
         run: dotnet workload install maui-ios --skip-manifest-update
 
-      - name: Configure NuGet sources
-        run: |
-          # Always reset nuget.org cleanly
-          dotnet nuget remove source nuget-org || true
-          dotnet nuget add source https://api.nuget.org/v3/index.json -n nuget-org
-          dotnet nuget list source
+      - name: List existing NuGet sources
+        run: dotnet nuget list source
+
+      - name: Remove duplicate nuget.org source if present
+        run: dotnet nuget remove source nuget-org || true
+
+      - name: Add nuget.org source (idempotent)
+        run: dotnet nuget add source --name nuget-org --source https://api.nuget.org/v3/index.json
+
+      - name: Verify configured NuGet sources
+        run: dotnet nuget list source
 
       - name: List repo files for debugging
         run: |
