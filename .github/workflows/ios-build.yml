@@ -211,6 +211,20 @@ jobs:
           echo 'Current keychain identities:'
           security find-identity -v -p codesigning || true
 
+      - name: Debug provisioning profile vs expected bundle id
+        run: |
+          set -euo pipefail
+          TMP_PLIST="$RUNNER_TEMP/profile.plist"
+          security cms -D -i "$HOME/Library/MobileDevice/Provisioning Profiles/${{ env.APP_IDENTIFIER }}.mobileprovision" > "$TMP_PLIST" || true
+          echo "== Profile UUID / Name =="
+          /usr/libexec/PlistBuddy -c 'Print UUID' "$TMP_PLIST" || true
+          /usr/libexec/PlistBuddy -c 'Print Name' "$TMP_PLIST" || true
+          echo "== application-identifier =="
+          /usr/libexec/PlistBuddy -c 'Print Entitlements:application-identifier' "$TMP_PLIST" || true
+          echo "== TeamIdentifier =="
+          /usr/libexec/PlistBuddy -c 'Print TeamIdentifier:0' "$TMP_PLIST" || true
+          echo "== Expecting bundle id = ${{ env.APP_IDENTIFIER }} =="
+
       - name: Publish .NET MAUI iOS app
         run: >-
           dotnet publish BibleQuestForKids/BibleQuestForKids.csproj
@@ -219,6 +233,7 @@ jobs:
           -p:RuntimeIdentifier=ios-arm64
           -p:ArchiveOnBuild=true
           -p:ApplicationId=${{ env.APP_IDENTIFIER }}
+          -p:BundleIdentifier=${{ env.APP_IDENTIFIER }}
           -p:CFBundleIdentifier=${{ env.APP_IDENTIFIER }}
           -p:ApplicationDisplayVersion=${{ env.APP_DISPLAY_VERSION }}
           -p:ApplicationVersion=${{ env.APP_BUILD_NUMBER }}
