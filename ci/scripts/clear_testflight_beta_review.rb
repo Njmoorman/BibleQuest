@@ -16,15 +16,11 @@ def env!(name)
 end
 
 # Pad signature components for App Store Connect JWT signing.
+# Converts the big integer to a 32-byte, big-endian binary string.
 def pad_component(component)
-  bytes = component.to_s(2)
-  if bytes.bytesize < 32
-    ("\x00" * (32 - bytes.bytesize)) + bytes
-  elsif bytes.bytesize > 32
-    bytes[-32, 32]
-  else
-    bytes
-  end
+  hex = component.to_s(16)
+  hex = "0#{hex}" if hex.length.odd?
+  [hex].pack('H*').rjust(32, "\x00")
 end
 
 # Build a JWT to interact with App Store Connect.
