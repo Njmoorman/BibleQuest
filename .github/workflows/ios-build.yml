@@ -165,7 +165,7 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple: -s -k '' "$KEYCHAIN_PATH"
           echo 'Imported signing certificate into temporary keychain.'
 
-          PROFILE_DIR="$RUNNER_TEMP/provisioning-profiles"
+          PROFILE_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
           mkdir -p "$PROFILE_DIR"
           PROFILE_PATH="$PROFILE_DIR/${APP_IDENTIFIER}.mobileprovision"
           echo "$APPLE_PROVISIONING_PROFILE_BASE64" | base64 --decode > "$PROFILE_PATH"
@@ -184,19 +184,6 @@ jobs:
             echo "TEAM_ID=$TEAM_ID"
           } >> "$GITHUB_ENV"
 
-      - name: Mirror provisioning profile to legacy path
-        env:
-          LEGACY_PROVISION_PATH: /Users/runner/work/_temp/provisioning-profiles/app.biblequest.mobileprovision
-        run: |
-          set -euo pipefail
-          mkdir -p "$(dirname "$LEGACY_PROVISION_PATH")"
-          if [ "${{ env.CODESIGN_PROVISION }}" = "$LEGACY_PROVISION_PATH" ]; then
-            echo "CODESIGN_PROVISION already matches legacy path; skipping duplicate copy."
-          else
-            cp "${{ env.CODESIGN_PROVISION }}" "$LEGACY_PROVISION_PATH"
-          fi
-          echo "LEGACY_PROVISION_PATH=$LEGACY_PROVISION_PATH" >> "$GITHUB_ENV"
-
       - name: Guard exported provisioning profile path
         run: |
           set -euo pipefail
@@ -210,11 +197,6 @@ jobs:
             exit 1
           fi
 
-          if [ -n "${LEGACY_PROVISION_PATH:-}" ] && [ ! -f "$LEGACY_PROVISION_PATH" ]; then
-            echo "Expected provisioning profile mirror at $LEGACY_PROVISION_PATH not found." >&2
-            exit 1
-          fi
-
           if ! security find-identity -v -p codesigning | grep -q "${{ env.CODESIGN_KEY }}"; then
             echo 'Signing identity referenced by $CODESIGN_KEY not currently available to codesign.' >&2
             security find-identity -v -p codesigning || true
@@ -222,9 +204,6 @@ jobs:
           fi
 
           echo "✅ Using provisioning profile at ${{ env.CODESIGN_PROVISION }}"
-          if [ -n "${LEGACY_PROVISION_PATH:-}" ]; then
-            echo "✅ Legacy provisioning profile mirror available at $LEGACY_PROVISION_PATH"
-          fi
           echo "✅ Signing identity ${{ env.CODESIGN_KEY }} is available"
           echo 'Current keychain identities:'
           security find-identity -v -p codesigning || true
