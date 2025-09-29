@@ -31,41 +31,35 @@ jobs:
       - name: Install MAUI workloads
         run: dotnet workload install maui-ios --skip-manifest-update
 
-      - name: List existing NuGet sources
-        run: dotnet nuget list source
-
-      - name: Ensure nuget.org source exists
-        # Guard against duplicate source errors by checking first (GitHub-hosted runners cache NuGet sources).
+      - name: Configure NuGet sources
         run: |
-          if ! dotnet nuget list source | grep -q "nuget-org"; then
-            dotnet nuget add source https://api.nuget.org/v3/index.json --name nuget-org
-          else
-            echo "NuGet source 'nuget-org' already registered. Skipping add."
-          fi
-
-      - name: Verify configured NuGet sources
-        run: dotnet nuget list source
+          # Always reset nuget.org cleanly
+          dotnet nuget remove source nuget-org || true
+          dotnet nuget add source https://api.nuget.org/v3/index.json -n nuget-org
+          dotnet nuget list source
 
       - name: List repo files for debugging
         run: |
           echo "🔍 Repo root:"
           ls -la
+          echo "🔍 BibleQuest folder:"
+          ls -la BibleQuest
           echo "🔍 BibleQuestForKids folder:"
-          ls -la BibleQuestForKids
+          ls -la BibleQuest/BibleQuestForKids
 
       - name: Restore NuGet packages
-        run: dotnet restore BibleQuestForKids/BibleQuestForKids.csproj --no-cache --disable-parallel --verbosity detailed
+        run: dotnet restore BibleQuest/BibleQuestForKids/BibleQuestForKids.csproj --no-cache --disable-parallel --verbosity detailed
 
       - name: Verify restore generated assets
         run: |
-          if [ ! -f BibleQuestForKids/obj/project.assets.json ]; then
+          if [ ! -f BibleQuest/BibleQuestForKids/obj/project.assets.json ]; then
             echo "❌ Restore did not generate project.assets.json"
             exit 1
           fi
           echo "✅ Found project.assets.json"
 
       - name: Build bundled web assets
-        working-directory: BibleQuestForKids/wwwroot
+        working-directory: BibleQuest/BibleQuestForKids/wwwroot
         run: |
           npm ci
           npm run build
@@ -74,12 +68,12 @@ jobs:
 
       - name: Strip development web assets
         run: |
-          rm -rf BibleQuestForKids/wwwroot/node_modules BibleQuestForKids/wwwroot/src
-          rm -f BibleQuestForKids/wwwroot/package*.json
+          rm -rf BibleQuest/BibleQuestForKids/wwwroot/node_modules BibleQuest/BibleQuestForKids/wwwroot/src
+          rm -f BibleQuest/BibleQuestForKids/wwwroot/package*.json
 
       - name: Guard dist assets exist
         run: |
-          DIST="BibleQuestForKids/wwwroot/dist"
+          DIST="BibleQuest/BibleQuestForKids/wwwroot/dist"
           if [ ! -s "$DIST/index.html" ]; then
             echo "dist/index.html missing. Run npm build before publishing." >&2
             exit 1
@@ -168,7 +162,7 @@ jobs:
 
       - name: Publish .NET MAUI iOS app
         run: >-
-          dotnet publish BibleQuestForKids/BibleQuestForKids.csproj
+          dotnet publish BibleQuest/BibleQuestForKids/BibleQuestForKids.csproj
           -c Release
           -f net8.0-ios
           -p:RuntimeIdentifier=ios-arm64
@@ -184,7 +178,7 @@ jobs:
 
       - name: Verify IPA contains dist assets
         run: |
-          IPA_PATH=$(find BibleQuestForKids/bin/Release/net8.0-ios/ios-arm64/publish -name '*.ipa' | head -1)
+          IPA_PATH=$(find BibleQuest/BibleQuestForKids/bin/Release/net8.0-ios/ios-arm64/publish -name '*.ipa' | head -1)
           unzip -q "$IPA_PATH" -d tmp
           APP_DIR=$(ls tmp/Payload)
           if [ ! -f "tmp/Payload/$APP_DIR/wwwroot/dist/index.html" ]; then
@@ -196,7 +190,7 @@ jobs:
       - name: Upload IPA to TestFlight
         uses: apple-actions/upload-testflight-build@v1
         with:
-          app-path: BibleQuestForKids/bin/Release/net8.0-ios/ios-arm64/publish/*.ipa
+          app-path: BibleQuest/BibleQuestForKids/bin/Release/net8.0-ios/ios-arm64/publish/*.ipa
           issuer-id: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
           api-key-id: ${{ secrets.APP_STORE_CONNECT_KEY_IDENTIFIER }}
           api-private-key: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
@@ -206,4 +200,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: BibleQuestForKids-ipa
-          path: BibleQuestForKids/bin/Release/net8.0-ios/ios-arm64/publish/*.ipa
+          path: BibleQuest/BibleQuestForKids/bin/Release/net8.0-ios/ios-arm64/publish/*.ipa
