@@ -128,14 +128,45 @@ jobs:
             echo "TEAM_ID=$TEAM_ID"
           } >> "$GITHUB_ENV"
 
+      - name: Mirror provisioning profile to legacy path
+        env:
+          LEGACY_PROVISION_PATH: /Users/runner/work/_temp/provisioning-profiles/app.biblequest.mobileprovision
+        run: |
+          set -euo pipefail
+          mkdir -p "$(dirname "$LEGACY_PROVISION_PATH")"
+          cp "${{ env.CODESIGN_PROVISION }}" "$LEGACY_PROVISION_PATH"
+          echo "LEGACY_PROVISION_PATH=$LEGACY_PROVISION_PATH" >> "$GITHUB_ENV"
+
       - name: Guard exported provisioning profile path
         run: |
+          set -euo pipefail
+          if [ -z "${{ env.CODESIGN_KEY }}" ]; then
+            echo 'Expected signing identity exported to $CODESIGN_KEY but it was empty.' >&2
+            exit 1
+          fi
+
           if [ ! -f "${{ env.CODESIGN_PROVISION }}" ]; then
             echo 'Expected provisioning profile referenced by $CODESIGN_PROVISION not found.' >&2
             exit 1
           fi
-          echo "✅ Using provisioning profile at ${{ env.CODESIGN_PROVISION }}"
 
+          if [ -n "${LEGACY_PROVISION_PATH:-}" ] && [ ! -f "$LEGACY_PROVISION_PATH" ]; then
+            echo "Expected provisioning profile mirror at $LEGACY_PROVISION_PATH not found." >&2
+            exit 1
+          fi
+
+          if ! security find-identity -v -p codesigning | grep -q "${{ env.CODESIGN_KEY }}"; then
+            echo 'Signing identity referenced by $CODESIGN_KEY not currently available to codesign.' >&2
+            security find-identity -v -p codesigning || true
+            exit 1
+          fi
+
+          echo "✅ Using provisioning profile at ${{ env.CODESIGN_PROVISION }}"
+          if [ -n "${LEGACY_PROVISION_PATH:-}" ]; then
+            echo "✅ Legacy provisioning profile mirror available at $LEGACY_PROVISION_PATH"
+          fi
+          echo "✅ Signing identity ${{ env.CODESIGN_KEY }} is available"
+          
       - name: Publish .NET MAUI iOS app
         run: >-
           dotnet publish BibleQuestForKids/BibleQuestForKids.csproj
