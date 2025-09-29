@@ -8,7 +8,7 @@ on:
 env:
   DOTNET_VERSION: 8.0.301
   APP_IDENTIFIER: app.biblequest
-  APP_DISPLAY_VERSION: 1.1.0
+  APP_DISPLAY_VERSION: 1.1.0 # bump this for App Store releases
 
 jobs:
   build:
@@ -33,15 +33,14 @@ jobs:
 
       - name: Configure NuGet sources
         run: |
-          if ! dotnet nuget list source | grep -q "https://api.nuget.org/v3/index.json"; then
-            dotnet nuget add source https://api.nuget.org/v3/index.json -n nuget-org
-          else
-            echo "✅ nuget.org feed already present"
-          fi
+          dotnet nuget remove source nuget-org || true
+          dotnet nuget remove source maui-feed || true
+          dotnet nuget add source https://api.nuget.org/v3/index.json -n nuget-org
+          dotnet nuget add source https://pkgs.dev.azure.com/dnceng/public/_packaging/maui/nuget/v3/index.json -n maui-feed
           dotnet nuget list source
 
       - name: Restore NuGet packages
-        run: dotnet restore ${{ github.workspace }}/BibleQuestForKids/BibleQuestForKids.sln --no-cache --disable-parallel --verbosity detailed
+        run: dotnet restore BibleQuestForKids/BibleQuestForKids.sln --no-cache --disable-parallel --verbosity detailed
 
       - name: Build bundled web assets
         working-directory: BibleQuestForKids/wwwroot
@@ -64,41 +63,12 @@ jobs:
             exit 1
           fi
           echo "✅ Found dist/index.html"
-          head -n 10 "$DIST/index.html"
 
       - name: Resolve build number (keeps TestFlight builds unique)
         id: resolve-build
-        env:
-          APP_IDENTIFIER: ${{ env.APP_IDENTIFIER }}
-          APP_DISPLAY_VERSION: ${{ env.APP_DISPLAY_VERSION }}
-          APP_STORE_CONNECT_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
-          APP_STORE_CONNECT_KEY_IDENTIFIER: ${{ secrets.APP_STORE_CONNECT_KEY_IDENTIFIER }}
-          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
         run: |
-          set -euo pipefail
           BUILD_NUMBER=$(date +%s)
-          echo "Seeded APP_BUILD_NUMBER=$BUILD_NUMBER from epoch seconds"
-
-          if [ -n "${APP_STORE_CONNECT_PRIVATE_KEY:-}" ] && [ -n "${APP_STORE_CONNECT_KEY_IDENTIFIER:-}" ] && [ -n "${APP_STORE_CONNECT_ISSUER_ID:-}" ]; then
-            echo "Checking App Store Connect for safe build number"
-            FINAL_BUILD_NUMBER=$(APP_BUILD_NUMBER="$BUILD_NUMBER" \
-              APP_DISPLAY_VERSION="$APP_DISPLAY_VERSION" \
-              APP_IDENTIFIER="$APP_IDENTIFIER" \
-              APP_STORE_CONNECT_PRIVATE_KEY="$APP_STORE_CONNECT_PRIVATE_KEY" \
-              APP_STORE_CONNECT_KEY_IDENTIFIER="$APP_STORE_CONNECT_KEY_IDENTIFIER" \
-              APP_STORE_CONNECT_ISSUER_ID="$APP_STORE_CONNECT_ISSUER_ID" \
-              ruby ci/scripts/maybe_raise_build_number.rb)
-          else
-            echo "App Store Connect credentials missing. Using epoch build number."
-            FINAL_BUILD_NUMBER="$BUILD_NUMBER"
-          fi
-
-          if [ -z "$FINAL_BUILD_NUMBER" ]; then
-            echo "Failed to resolve build number" >&2
-            exit 1
-          fi
-
-          echo "APP_BUILD_NUMBER=$FINAL_BUILD_NUMBER" | tee -a "$GITHUB_ENV"
+          echo "APP_BUILD_NUMBER=$BUILD_NUMBER" >> $GITHUB_ENV
 
       - name: Install signing assets
         env:
@@ -114,10 +84,6 @@ jobs:
 
           echo "$APPLE_CERTIFICATE_P12_BASE64" | base64 --decode > signing.p12
           security import signing.p12 -k "$KEYCHAIN" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
-          security delete-generic-password -l "signing" "$KEYCHAIN" 2>/dev/null || true
-
-          security list-keychains -s "$KEYCHAIN" $(security list-keychains | tr -d '"')
-          security set-key-partition-list -S apple-tool:,apple: -s -k "" "$KEYCHAIN"
 
           PROFILE_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
           mkdir -p "$PROFILE_DIR"
@@ -126,7 +92,7 @@ jobs:
 
           CODESIGN_IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN" | head -1 | awk '{print $2}')
           if [ -z "$CODESIGN_IDENTITY" ]; then
-            echo "No code signing identity found in imported certificate" >&2
+            echo "No code signing identity found" >&2
             exit 1
           fi
 
@@ -137,7 +103,7 @@ jobs:
 
       - name: Publish .NET MAUI iOS app
         run: >-
-          dotnet publish ${{ github.workspace }}/BibleQuestForKids/BibleQuestForKids.sln
+          dotnet publish BibleQuestForKids/BibleQuestForKids.csproj
           -c Release
           -f net8.0-ios
           -p:RuntimeIdentifier=ios-arm64
