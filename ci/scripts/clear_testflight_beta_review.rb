@@ -66,6 +66,14 @@ apps_req['Authorization'] = "Bearer #{token}"
 apps_res = Net::HTTP.start(apps_uri.host, apps_uri.port, use_ssl: true) { |http| http.request(apps_req) }
 unless apps_res.is_a?(Net::HTTPSuccess)
   warn "Failed to query App Store Connect apps: #{apps_res.code} #{apps_res.body}"
+
+  # Allow builds to continue even when the API key cannot list apps (common on TestFlight-only keys).
+  if apps_res.is_a?(Net::HTTPUnauthorized) || apps_res.is_a?(Net::HTTPForbidden)
+    warn 'App Store Connect API key is missing the App Manager (or higher) role. '
+    warn 'Skipping TestFlight beta review cleanup so the build can still upload.'
+    exit 0
+  end
+
   exit 1
 end
 
