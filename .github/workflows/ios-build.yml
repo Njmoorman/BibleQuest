@@ -190,7 +190,11 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$(dirname "$LEGACY_PROVISION_PATH")"
-          cp "${{ env.CODESIGN_PROVISION }}" "$LEGACY_PROVISION_PATH"
+          if [ "${{ env.CODESIGN_PROVISION }}" = "$LEGACY_PROVISION_PATH" ]; then
+            echo "CODESIGN_PROVISION already matches legacy path; skipping duplicate copy."
+          else
+            cp "${{ env.CODESIGN_PROVISION }}" "$LEGACY_PROVISION_PATH"
+          fi
           echo "LEGACY_PROVISION_PATH=$LEGACY_PROVISION_PATH" >> "$GITHUB_ENV"
 
       - name: Guard exported provisioning profile path
