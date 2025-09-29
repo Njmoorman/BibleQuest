@@ -19,19 +19,16 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ✅ Pin the SDK so the runner never uses 9.0
+      # ✅ Pin to .NET 8 so workloads match
       - name: Pin .NET SDK via global.json
         run: |
           set -euo pipefail
           cat > global.json <<'EOF'
           {
-            "sdk": {
-              "version": "8.0.301",
-              "rollForward": "disable"
-            }
+            "sdk": { "version": "8.0.301", "rollForward": "disable" }
           }
           EOF
-          echo 'Wrote global.json to force .NET 8.0.301'
+          echo 'Wrote global.json (8.0.301, rollForward=disable)'
 
       - name: Setup .NET SDK (8.0.301)
         uses: actions/setup-dotnet@v4
@@ -41,21 +38,14 @@ jobs:
       - name: Verify pinned .NET SDK
         run: |
           set -euo pipefail
-          dotnet --info | sed -n '1,80p'
-          echo 'dotnet version:'
           dotnet --version
+          dotnet --info | sed -n '1,60p'
 
       - name: Capture runner diagnostics
         run: |
           set -euo pipefail
           echo "Xcode: $(xcodebuild -version | paste -sd ' ' -)"
           xcodebuild -showsdks
-
-      - name: Discover key project files
-        run: |
-          set -euo pipefail
-          find . -maxdepth 5 -name '*.csproj' -print
-          find . -maxdepth 5 -name '*.sln' -print
 
       - name: Setup Node.js for web assets
         uses: actions/setup-node@v4
@@ -64,8 +54,7 @@ jobs:
 
       - name: Build bundled web assets
         working-directory: BibleQuestForKids/wwwroot
-        env:
-          CI: 'true'
+        env: { CI: 'true' }
         run: |
           set -euo pipefail
           npm ci
@@ -179,7 +168,7 @@ jobs:
           echo "✅ Using provisioning profile (UUID=${{ env.CODESIGN_PROVISION }}, Name=${{ env.CODESIGN_PROVISION_NAME }})"
           echo "✅ Signing identity ${{ env.CODESIGN_KEY }} is available"
 
-      # 🧱 Pin bundle IDs at evaluation time so MSBuild can't lose them
+      # 🧱 Pin bundle IDs at evaluation time
       - name: Write Directory.Build.props (pin bundle IDs)
         run: |
           set -euo pipefail
@@ -195,6 +184,25 @@ jobs:
           EOF
           echo 'Wrote Directory.Build.props to pin identifiers.'
 
+      # ✅ Hard-write the Info.plist so no placeholder survives
+      - name: Patch Info.plist bundle id + versions
+        run: |
+          set -euo pipefail
+          PLIST="BibleQuestForKids/Platforms/iOS/Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier ${APP_IDENTIFIER}" "$PLIST" || /usr/libexec/PlistBuddy -c "Add :CFBundleIdentifier string ${APP_IDENTIFIER}" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${APP_DISPLAY_VERSION}" "$PLIST" || true
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${APP_BUILD_NUMBER}" "$PLIST" || true
+          echo 'Patched Info.plist with concrete identifiers.'
+
+      - name: Show Info.plist (after patch)
+        run: |
+          set -euo pipefail
+          plutil -p BibleQuestForKids/Platforms/iOS/Info.plist
+          echo "Expecting Bundle ID: ${APP_IDENTIFIER}"
+          echo "Expecting Version  : ${APP_DISPLAY_VERSION}"
+          echo "Expecting Build    : ${APP_BUILD_NUMBER}"
+
+      # 🔎 Sanity: show evaluated properties
       - name: Inject a one-off MSBuild target to print identifiers
         run: |
           set -euo pipefail
