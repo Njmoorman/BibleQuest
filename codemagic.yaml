@@ -16,6 +16,21 @@ workflows:
         APP_DISPLAY_VERSION: 1.1.0 # Keep in sync with App Store metadata before submissions
         TEAM_ID: 2989BXM365
     scripts:
+      - name: "Capture build machine diagnostics"
+        script: |
+          set -euo pipefail
+          echo '== System information =='
+          uname -a
+          sw_vers
+          echo '== Xcode version =='
+          xcodebuild -version
+          echo '== Available SDKs =='
+          xcodebuild -showsdks
+          echo '== Disk usage snapshot =='
+          df -h
+          echo '== Project root contents =='
+          ls -al
+
       - name: "Resolve build number (epoch seed + App Store Connect guard)"
         script: |
           set -euo pipefail
@@ -58,17 +73,24 @@ workflows:
           /tmp/dotnet-install.sh --version "$DOTNET_VERSION" --install-dir "$DOTNET_ROOT"
           export PATH="$DOTNET_ROOT:$PATH"
           dotnet --info
+          dotnet --list-sdks
+          dotnet --list-runtimes
 
       - name: "Install MAUI workloads"
         script: |
           export PATH="$DOTNET_ROOT:$PATH"
           dotnet workload install maui-ios --skip-manifest-update
           dotnet workload restore BibleQuestForKids/BibleQuestForKids.csproj
+          dotnet workload list
+          echo 'Resolved Xcode tools:'
+          xcrun simctl list devices | head -n 40
+          msbuild -version || echo 'msbuild not available on PATH yet.'
 
       - name: "Restore NuGet packages"
         script: |
           export PATH="$DOTNET_ROOT:$PATH"
           dotnet restore BibleQuestForKids/BibleQuestForKids.csproj
+          du -sh "$HOME/.nuget/packages" || true
 
       - name: "Install signing assets (TestFlight uses same assets as App Store)"
         script: |
@@ -105,16 +127,24 @@ workflows:
           echo "CODESIGN_KEY=$CODESIGN_IDENTITY" >> "$CM_ENV"
           echo "CODESIGN_PROVISION=$PROFILE_PATH" >> "$CM_ENV"
           echo "Stored codesign identity and provisioning profile for MAUI publish"
+          security find-identity -v -p codesigning
 
       - name: "Build bundled web assets (npm only)"
         script: |
           cd BibleQuestForKids/wwwroot
           npm ci
           npm run build
+          echo '== dist/ contents after npm build =='
+          if [ -d dist ]; then
+            ls -R dist | head -n 40
+          else
+            echo 'dist directory not found immediately after build.'
+          fi
           cd ../..
           # Strip dev dependencies
           rm -rf BibleQuestForKids/wwwroot/node_modules BibleQuestForKids/wwwroot/src
           rm -f BibleQuestForKids/wwwroot/package*.json
+          echo 'Stripped development web assets.'
 
       - name: "Guard: dist/ exists and index.html present"
         script: |
@@ -137,6 +167,9 @@ workflows:
             -p:CodesignKey="$CODESIGN_KEY" \
             -p:CodesignProvision="$CODESIGN_PROVISION" \
             -p:CodesignTeamId="$TEAM_ID"
+          PUBLISH_ROOT='BibleQuestForKids/bin/Release/net8.0-ios/ios-arm64/publish'
+          find "$PUBLISH_ROOT" -maxdepth 2 -type f | sort
+          du -sh "$PUBLISH_ROOT"
 
       - name: "Verify IPA contains dist assets"
         script: |
@@ -148,6 +181,7 @@ workflows:
             exit 1
           fi
           echo "✅ IPA contains dist/index.html"
+          ls -al "tmp/Payload/$APP_DIR/wwwroot/dist" || true
 
       - name: "Collect IPA"
         script: |
@@ -195,6 +229,7 @@ workflows:
           fi
 
           echo "Uploading $IPA_PATH to TestFlight via Transporter (this does not submit to App Store review)."
+          ls -al "$IPA_PATH"
           xcrun altool --upload-app \
             --file "$IPA_PATH" \
             --type ios \

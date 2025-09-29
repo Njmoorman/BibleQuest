@@ -23,6 +23,20 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Capture runner diagnostics
+        run: |
+          set -euo pipefail
+          echo '== System information =='
+          uname -a
+          sw_vers
+          echo "Xcode version: $(xcodebuild -version | paste -sd ' ' -)"
+          echo 'Available SDKs:'
+          xcodebuild -showsdks
+          echo '== Disk usage snapshot (top level) =='
+          df -h
+          echo '== Repository structure (first level) =='
+          ls -al
+
       - name: Discover key project files
         run: |
           echo '== .csproj files =='
@@ -35,15 +49,40 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
+      - name: Log .NET environment
+        run: |
+          set -euo pipefail
+          echo '== dotnet --info =='
+          dotnet --info
+          echo '== Installed SDKs =='
+          dotnet --list-sdks
+          echo '== Installed runtimes =='
+          dotnet --list-runtimes
+
       - name: Setup Node.js for web assets
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
+      - name: Log Node.js environment
+        run: |
+          set -euo pipefail
+          echo "node $(node --version)"
+          echo "npm $(npm --version)"
+          npm config get prefix
+
       - name: Install required MAUI workloads
         run: |
           dotnet workload install maui-ios --skip-manifest-update
           dotnet workload list
+
+      - name: Verify key MAUI tools
+        run: |
+          set -euo pipefail
+          echo '== Resolving simulators and devices =='
+          xcrun simctl list devices | head -n 50
+          echo '== msbuild version =='
+          msbuild -version || echo 'msbuild not available on PATH yet.'
 
       - name: Ensure NuGet.org feed is available
         run: |
@@ -56,7 +95,11 @@ jobs:
         run: dotnet workload restore BibleQuestForKids/BibleQuestForKids.csproj
 
       - name: Restore NuGet packages
-        run: dotnet restore BibleQuestForKids/BibleQuestForKids.csproj --no-cache --disable-parallel
+        run: |
+          set -euo pipefail
+          dotnet restore BibleQuestForKids/BibleQuestForKids.csproj --no-cache --disable-parallel
+          echo '== Restored package cache snapshot =='
+          du -sh ~/.nuget/packages || true
 
       - name: Build bundled web assets
         working-directory: BibleQuestForKids/wwwroot
@@ -65,11 +108,18 @@ jobs:
         run: |
           npm ci
           npm run build
+          echo '== dist/ contents after npm build =='
+          if [ -d dist ]; then
+            ls -R dist | head -n 40
+          else
+            echo 'dist directory not found immediately after build.'
+          fi
 
       - name: Strip development web assets before publishing
         run: |
           rm -rf BibleQuestForKids/wwwroot/node_modules BibleQuestForKids/wwwroot/src
           rm -f BibleQuestForKids/wwwroot/package*.json
+          echo 'Stripped development dependencies from wwwroot.'
 
       - name: Guard dist assets exist
         run: |
@@ -91,6 +141,7 @@ jobs:
           set -euo pipefail
           BUILD_NUMBER=$(date +%s)
           echo "Seeded APP_BUILD_NUMBER=$BUILD_NUMBER from epoch seconds"
+          echo "Resolved APP_DISPLAY_VERSION=${{ env.APP_DISPLAY_VERSION }}"
           echo "APP_BUILD_NUMBER=$BUILD_NUMBER" >> "$GITHUB_ENV"
 
       - name: Install signing assets
@@ -107,21 +158,25 @@ jobs:
           security unlock-keychain -p '' "$KEYCHAIN_PATH"
           security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
           security default-keychain -s "$KEYCHAIN_PATH"
+          echo "Keychain prepared at $KEYCHAIN_PATH"
 
           echo "$APPLE_CERTIFICATE_P12_BASE64" | base64 --decode > signing.p12
           security import signing.p12 -k "$KEYCHAIN_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
           security set-key-partition-list -S apple-tool:,apple: -s -k '' "$KEYCHAIN_PATH"
+          echo 'Imported signing certificate into temporary keychain.'
 
           PROFILE_DIR="$RUNNER_TEMP/provisioning-profiles"
           mkdir -p "$PROFILE_DIR"
           PROFILE_PATH="$PROFILE_DIR/${APP_IDENTIFIER}.mobileprovision"
           echo "$APPLE_PROVISIONING_PROFILE_BASE64" | base64 --decode > "$PROFILE_PATH"
+          echo "Provisioning profile exported to $PROFILE_PATH"
 
           CODESIGN_IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | head -1 | awk '{print $2}')
           if [ -z "$CODESIGN_IDENTITY" ]; then
             echo 'No signing identity located in keychain.' >&2
             exit 1
           fi
+          security find-identity -v -p codesigning "$KEYCHAIN_PATH"
 
           {
             echo "CODESIGN_KEY=$CODESIGN_IDENTITY"
@@ -167,7 +222,9 @@ jobs:
             echo "✅ Legacy provisioning profile mirror available at $LEGACY_PROVISION_PATH"
           fi
           echo "✅ Signing identity ${{ env.CODESIGN_KEY }} is available"
-          
+          echo 'Current keychain identities:'
+          security find-identity -v -p codesigning || true
+
       - name: Publish .NET MAUI iOS app
         run: >-
           dotnet publish BibleQuestForKids/BibleQuestForKids.csproj
@@ -183,6 +240,18 @@ jobs:
           -p:CodesignProvision="${{ env.CODESIGN_PROVISION }}"
           -p:CodesignTeamId=${{ env.TEAM_ID }}
           --verbosity minimal
+      - name: Summarize publish output
+        run: |
+          set -euo pipefail
+          PUBLISH_ROOT='BibleQuestForKids/bin/Release/net8.0-ios/ios-arm64/publish'
+          if [ ! -d "$PUBLISH_ROOT" ]; then
+            echo "Publish output directory $PUBLISH_ROOT not found." >&2
+            exit 1
+          fi
+          echo "Contents of $PUBLISH_ROOT:"
+          find "$PUBLISH_ROOT" -maxdepth 2 -type f | sort
+          echo 'Disk usage summary:'
+          du -sh "$PUBLISH_ROOT"
 
       - name: Verify IPA contains dist assets
         run: |
@@ -191,13 +260,16 @@ jobs:
             echo 'No IPA found after publish step.' >&2
             exit 1
           fi
+          echo "Inspecting IPA at $IPA_PATH"
           unzip -q "$IPA_PATH" -d tmp
           APP_DIR=$(ls tmp/Payload)
           if [ ! -f "tmp/Payload/$APP_DIR/wwwroot/dist/index.html" ]; then
             echo 'IPA missing dist/index.html' >&2
             exit 1
           fi
+          echo "Payload app directory: $APP_DIR"
           echo '✅ IPA contains dist/index.html'
+          ls -al "tmp/Payload/$APP_DIR/wwwroot/dist" || true
 
       - name: Upload IPA to TestFlight (does not submit to App Store review)
         uses: apple-actions/upload-testflight-build@v1
