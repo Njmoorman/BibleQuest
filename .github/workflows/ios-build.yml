@@ -166,7 +166,7 @@ jobs:
             echo "✅ Legacy provisioning profile mirror available at $LEGACY_PROVISION_PATH"
           fi
           echo "✅ Signing identity ${{ env.CODESIGN_KEY }} is available"
-
+          
       - name: Publish .NET MAUI iOS app
         run: >-
           dotnet publish BibleQuestForKids/BibleQuestForKids.csproj
