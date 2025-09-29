@@ -6,9 +6,6 @@ on:
       - main
   workflow_dispatch:
 
-# Global defaults shared across steps. Keep APP_DISPLAY_VERSION in sync
-# with App Store metadata before a production submission; TestFlight
-# builds can safely reuse the same value between beta iterations.
 env:
   DOTNET_VERSION: '8.0.301'
   APP_IDENTIFIER: app.biblequest
@@ -171,20 +168,29 @@ jobs:
           echo "$APPLE_PROVISIONING_PROFILE_BASE64" | base64 --decode > "$PROFILE_PATH"
           echo "Provisioning profile exported to $PROFILE_PATH"
 
-          CODESIGN_IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | head -1 | awk '{print $2}')
-          if [ -z "$CODESIGN_IDENTITY" ]; then
+          # Extract a friendly signing identity common name (not the SHA hash)
+          CODESIGN_COMMON_NAME=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | sed -n 's/.*"\(.*\)"/\1/p' | head -1)
+          if [ -z "$CODESIGN_COMMON_NAME" ]; then
             echo 'No signing identity located in keychain.' >&2
+            security find-identity -v -p codesigning "$KEYCHAIN_PATH" || true
             exit 1
           fi
-          security find-identity -v -p codesigning "$KEYCHAIN_PATH"
+
+          # Read the installed provisioning profile's UUID and Name
+          TMP_PLIST="$RUNNER_TEMP/profile.plist"
+          security cms -D -i "$PROFILE_PATH" > "$TMP_PLIST"
+          PROFILE_UUID=$(/usr/libexec/PlistBuddy -c 'Print UUID' "$TMP_PLIST")
+          PROFILE_NAME=$(/usr/libexec/PlistBuddy -c 'Print Name' "$TMP_PLIST")
 
           {
-            echo "CODESIGN_KEY=$CODESIGN_IDENTITY"
-            echo "CODESIGN_PROVISION=$PROFILE_PATH"
+            echo "CODESIGN_KEY=$CODESIGN_COMMON_NAME"
+            # CodesignProvision must be profile Name or UUID (not a file path)
+            echo "CODESIGN_PROVISION=$PROFILE_UUID"
+            echo "CODESIGN_PROVISION_NAME=$PROFILE_NAME"
             echo "TEAM_ID=$TEAM_ID"
           } >> "$GITHUB_ENV"
 
-      - name: Guard exported provisioning profile path
+      - name: Guard signing setup
         run: |
           set -euo pipefail
           if [ -z "${{ env.CODESIGN_KEY }}" ]; then
@@ -192,10 +198,7 @@ jobs:
             exit 1
           fi
 
-          if [ ! -f "${{ env.CODESIGN_PROVISION }}" ]; then
-            echo 'Expected provisioning profile referenced by $CODESIGN_PROVISION not found.' >&2
-            exit 1
-          fi
+          ls "$HOME/Library/MobileDevice/Provisioning Profiles"/*.mobileprovision >/dev/null
 
           if ! security find-identity -v -p codesigning | grep -q "${{ env.CODESIGN_KEY }}"; then
             echo 'Signing identity referenced by $CODESIGN_KEY not currently available to codesign.' >&2
@@ -203,7 +206,7 @@ jobs:
             exit 1
           fi
 
-          echo "✅ Using provisioning profile at ${{ env.CODESIGN_PROVISION }}"
+          echo "✅ Using provisioning profile (UUID=${{ env.CODESIGN_PROVISION }}, Name=${{ env.CODESIGN_PROVISION_NAME }})"
           echo "✅ Signing identity ${{ env.CODESIGN_KEY }} is available"
           echo 'Current keychain identities:'
           security find-identity -v -p codesigning || true
@@ -214,15 +217,16 @@ jobs:
           -c Release
           -f net8.0-ios
           -p:RuntimeIdentifier=ios-arm64
-          -p:BuildIpa=true
+          -p:ArchiveOnBuild=true
           -p:ApplicationId=${{ env.APP_IDENTIFIER }}
           -p:CFBundleIdentifier=${{ env.APP_IDENTIFIER }}
           -p:ApplicationDisplayVersion=${{ env.APP_DISPLAY_VERSION }}
           -p:ApplicationVersion=${{ env.APP_BUILD_NUMBER }}
-          -p:CodesignKey=${{ env.CODESIGN_KEY }}
+          -p:CodesignKey="${{ env.CODESIGN_KEY }}"
           -p:CodesignProvision="${{ env.CODESIGN_PROVISION }}"
           -p:CodesignTeamId=${{ env.TEAM_ID }}
           --verbosity minimal
+
       - name: Summarize publish output
         run: |
           set -euo pipefail
