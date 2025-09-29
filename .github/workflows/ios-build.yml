@@ -18,6 +18,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Show repo tree
+        run: |
+          echo "🔍 Repo tree (3 levels):"
+          find . -maxdepth 3 -print
+
       - name: Setup .NET SDK
         uses: actions/setup-dotnet@v4
         with:
@@ -33,12 +38,12 @@ jobs:
 
       - name: Configure NuGet sources
         run: |
-          dotnet nuget remove source nuget-org || true
-          dotnet nuget add source https://api.nuget.org/v3/index.json -n nuget-org
+          if ! dotnet nuget list source | grep -q "https://api.nuget.org/v3/index.json"; then
+            dotnet nuget add source https://api.nuget.org/v3/index.json -n nuget-org
+          else
+            echo "✅ nuget.org feed already present"
+          fi
           dotnet nuget list source
-
-      - name: List repo files
-        run: find . -maxdepth 3 -type f -print
 
       - name: Restore NuGet packages
         run: dotnet restore BibleQuestForKids/BibleQuestForKids.csproj --no-cache --disable-parallel --verbosity detailed
