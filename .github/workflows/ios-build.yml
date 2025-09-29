@@ -34,12 +34,14 @@ jobs:
       - name: List existing NuGet sources
         run: dotnet nuget list source
 
-      - name: Remove duplicate nuget.org source if present
-        run: dotnet nuget remove source nuget-org || true
-
-      - name: Add nuget.org source (idempotent)
-        # dotnet nuget add source expects the feed URL as a positional argument.
-        run: dotnet nuget add source https://api.nuget.org/v3/index.json --name nuget-org
+      - name: Ensure nuget.org source exists
+        # Guard against duplicate source errors by checking first (GitHub-hosted runners cache NuGet sources).
+        run: |
+          if ! dotnet nuget list source | grep -q "nuget-org"; then
+            dotnet nuget add source https://api.nuget.org/v3/index.json --name nuget-org
+          else
+            echo "NuGet source 'nuget-org' already registered. Skipping add."
+          fi
 
       - name: Verify configured NuGet sources
         run: dotnet nuget list source
