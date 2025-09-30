@@ -44,6 +44,12 @@ jobs:
           dotnet nuget add source https://pkgs.dev.azure.com/dnceng/public/_packaging/maui/nuget/v3/index.json -n maui-feed
           dotnet nuget list source
 
+      # 👇 New step to prevent stale caches
+      - name: Clean before restore
+        run: |
+          dotnet clean BibleQuestForKids/BibleQuestForKids.csproj -c Release
+          rm -rf ~/.nuget/packages
+
       - name: Restore NuGet packages
         run: dotnet restore BibleQuestForKids/BibleQuestForKids.csproj --no-cache --disable-parallel --verbosity minimal
 
