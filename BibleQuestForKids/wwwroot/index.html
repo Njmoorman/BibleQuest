@@ -2,10 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
-    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>Bible Quest for Kids</title>
     <base href="/" />
   </head>
@@ -14,11 +11,10 @@
     <div id="app">
       <noscript>Enable JavaScript to load Bible Quest for Kids.</noscript>
     </div>
+
     <script>
       (function () {
-        const runtimeScript = document.querySelector(
-          'script[src$="_framework/blazor.webview.js"]'
-        );
+        const runtimeScript = document.querySelector('script[src$="_framework/blazor.webview.js"]');
         const runtimeBase =
           runtimeScript?.dataset?.blazorRuntimeBase ??
           window.BibleQuest?.blazorRuntimeBase ??
@@ -107,8 +103,10 @@
         };
       })();
     </script>
+
+    <!-- ✅ Call bootstrap -->
     <script>
-  window.BibleQuest?.loadReactApp();
-</script>
+      window.BibleQuest?.loadReactApp();
+    </script>
   </body>
 </html>
