@@ -4,7 +4,28 @@
 
 <p>🚀 Your Blazor WebView is running inside .NET MAUI!</p>
 
-<!-- Example: render a component or static HTML -->
-<div>
-    <p>This is where your Bible Quest UI can load from your Blazor components or bundled assets.</p>
+<hr />
+
+<div id="react-root">
+    <p>Loading Bible Quest React bundle...</p>
 </div>
+
+@code {
+    [Inject] IJSRuntime JS { get; set; } = default!;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                // Call the JS bootstrapper in wwwroot/index.html
+                await JS.InvokeVoidAsync("BibleQuest.loadReactApp");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"React bootstrap failed: {ex.Message}");
+            }
+        }
+    }
+}
