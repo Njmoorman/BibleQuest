@@ -1,7 +1,7 @@
 using Microsoft.Maui;
 using Microsoft.Maui.Hosting;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.AspNetCore.Components.WebView.Maui;  // ✅ needed for AddMauiBlazorWebView
+using Microsoft.AspNetCore.Components.WebView.Maui;  // ✅ Needed for AddMauiBlazorWebView
 
 namespace BibleQuestForKids
 {
@@ -19,10 +19,11 @@ namespace BibleQuestForKids
                     fonts.AddFont("OpenSans-Semibold.ttf", "OpenSansSemibold");
                 });
 
-            // ✅ This is where the Blazor WebView service gets registered
+            // ✅ Register Blazor WebView support
             builder.Services.AddMauiBlazorWebView();
 
 #if DEBUG
+            // ✅ Adds developer tools for Blazor WebView in debug builds
             builder.Services.AddBlazorWebViewDeveloperTools();
 #endif
 
