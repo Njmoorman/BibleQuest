@@ -8,10 +8,13 @@
     <SingleProject>true</SingleProject>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+
+    <!-- App metadata -->
     <ApplicationTitle>Bible Quest for Kids</ApplicationTitle>
     <ApplicationId>app.biblequest</ApplicationId>
-    <ApplicationVersion>1.0.0</ApplicationVersion>
-    <ApplicationDisplayVersion>1.0.0</ApplicationDisplayVersion>
+    <!-- ✅ Match workflow -->
+    <ApplicationVersion>1.1.0</ApplicationVersion>
+    <ApplicationDisplayVersion>1.1.0</ApplicationDisplayVersion>
   </PropertyGroup>
 
   <ItemGroup>
@@ -30,6 +33,9 @@
     <MauiImage Include="Resources\Images\*" />
     <MauiSplashScreen Include="Resources\Splash\*" />
     <MauiAsset Include="Resources\Raw\**" />
+    <!-- ✅ Ensure Blazor/React static assets get published -->
+    <MauiAsset Include="wwwroot\**"
+               LogicalName="wwwroot\%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 
 </Project>
