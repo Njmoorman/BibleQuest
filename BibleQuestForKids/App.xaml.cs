@@ -1,41 +1,29 @@
-using System.Threading.Tasks;
-using Microsoft.Maui;
-using Microsoft.Maui.ApplicationModel;
 using Microsoft.Maui.Controls;
-using Microsoft.Maui.Graphics;
 
-namespace BibleQuestForKids;
-
-public partial class App : Application
+namespace BibleQuestForKids
 {
-    public App()
+    public partial class App : Application
     {
-        InitializeComponent();
-
-        // Show a branded splash handoff before the WebView is ready. Keeps TestFlight/App Store builds consistent.
-        MainPage = new ContentPage
+        public App()
         {
-            BackgroundColor = Colors.White,
-            Content = new Grid
+            InitializeComponent();
+
+            // ✅ Set the main page to a BlazorWebView host
+            MainPage = new ContentPage
             {
-                Children =
+                Content = new BlazorWebView
                 {
-                    new Image
+                    HostPage = "wwwroot/index.html",   // ✅ your bundled Blazor app
+                    RootComponents =
                     {
-                        Source = "Resources/Images/splash.png",
-                        Aspect = Aspect.AspectFit,
-                        HorizontalOptions = LayoutOptions.Center,
-                        VerticalOptions = LayoutOptions.Center
+                        new RootComponent
+                        {
+                            Selector = "#app",
+                            ComponentType = typeof(Main)
+                        }
                     }
                 }
-            }
-        };
-
-        // Warm up the WebView after the splash appears, then swap the actual page in place.
-        MainThread.BeginInvokeOnMainThread(async () =>
-        {
-            await Task.Delay(500);
-            MainPage = new MainPage();
-        });
+            };
+        }
     }
 }
