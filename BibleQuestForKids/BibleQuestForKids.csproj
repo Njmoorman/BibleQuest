@@ -14,15 +14,17 @@
     <ApplicationVersion>1.1.0</ApplicationVersion>
     <ApplicationDisplayVersion>1.1.0</ApplicationDisplayVersion>
 
-    <!-- ✅ Required so StaticWebAssetsPrepareForRun exists -->
+    <!-- 👇 Required so StaticWebAssetsPrepareForRun works -->
     <UsingMicrosoftNETSdkWeb>true</UsingMicrosoftNETSdkWeb>
   </PropertyGroup>
 
+  <!-- ✅ Fonts -->
   <ItemGroup>
     <MauiFont Include="Resources/Fonts/OpenSans-Regular.ttf" Alias="OpenSansRegular" />
     <MauiFont Include="Resources/Fonts/OpenSans-Semibold.ttf" Alias="OpenSansSemibold" />
   </ItemGroup>
 
+  <!-- ✅ Core MAUI + Blazor WebView packages -->
   <ItemGroup>
     <PackageReference Include="Microsoft.Maui.Controls" Version="8.0.60" />
     <PackageReference Include="Microsoft.Maui.Controls.Compatibility" Version="8.0.60" />
@@ -30,11 +32,15 @@
     <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="8.0.60" />
   </ItemGroup>
 
+  <!-- ✅ Images, splash, raw assets -->
   <ItemGroup>
     <MauiImage Include="Resources\Images\*" />
     <MauiSplashScreen Include="Resources\Splash\*" />
     <MauiAsset Include="Resources\Raw\**" />
-    <!-- ✅ Ensure Blazor/React static assets get published -->
+  </ItemGroup>
+
+  <!-- ✅ Ensure web assets (Blazor + React dist) are published -->
+  <ItemGroup>
     <MauiAsset Include="wwwroot\**"
                LogicalName="wwwroot\%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
