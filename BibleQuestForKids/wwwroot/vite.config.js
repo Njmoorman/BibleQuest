@@ -6,9 +6,9 @@ import { resolve } from "path";
 export default defineConfig({
   plugins: [react()],
   root: ".", // project root for npm run build
-  base: "./", // ensures relative paths work in MAUI wwwroot
+  base: "./", // ensures relative paths work inside MAUI wwwroot
   build: {
-    outDir: "dist", // must match pipeline expectations
+    outDir: "dist", // must match workflow path
     emptyOutDir: true,
     assetsDir: "assets",
     rollupOptions: {
