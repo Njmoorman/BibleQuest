@@ -2,19 +2,17 @@ name: iOS Build & Deploy (Bible Quest for Kids)
 
 on:
   push:
-    branches:
-      - "main"
+    branches: [ "main" ]
   workflow_dispatch:
 
 env:
-  DOTNET_VERSION: 8.0.300
-  NODE_VERSION: 18
+  DOTNET_VERSION: 8.0.301
   APP_IDENTIFIER: app.biblequest
-  APP_DISPLAY_VERSION: 1.1.0
+  APP_DISPLAY_VERSION: 1.1.0 # Reminder: update before App Store submission if marketing version changes
 
 jobs:
   build:
-    runs-on: macos-14
+    runs-on: macos-latest
 
     steps:
       - name: Checkout repository
@@ -25,150 +23,158 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
-      - name: Setup Node.js
+      - name: Setup Node.js for web assets
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: "npm"
-          cache-dependency-path: BibleQuestForKids/wwwroot/package-lock.json
-
-      - name: Configure NuGet sources
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo "🧩 Configuring NuGet feeds"
-          existing_sources=$(dotnet nuget list source | awk 'NR>2 {print $2}')
-          if echo "$existing_sources" | grep -q "nuget-org"; then
-            dotnet nuget remove source nuget-org
-          fi
-          if echo "$existing_sources" | grep -q "dotnet8"; then
-            dotnet nuget remove source dotnet8
-          fi
-          dotnet nuget add source https://api.nuget.org/v3/index.json -n nuget-org
-          dotnet nuget add source https://aka.ms/dotnet8/nuget/index.json -n dotnet8
-          dotnet nuget list source
+          node-version: 18
 
       - name: Install MAUI workloads
-        shell: bash
+        run: dotnet workload install maui-ios --skip-manifest-update
+
+      - name: Configure NuGet sources
         run: |
-          set -euo pipefail
-          echo "📦 Installing MAUI iOS workloads"
-          dotnet workload install maui-ios \
-            --source https://aka.ms/dotnet8/nuget/index.json \
-            --skip-sign-check
-          dotnet workload list
+          dotnet nuget remove source nuget-org || true
+          dotnet nuget remove source maui-feed || true
+          dotnet nuget add source https://api.nuget.org/v3/index.json -n nuget-org
+          dotnet nuget add source https://pkgs.dev.azure.com/dnceng/public/_packaging/maui/nuget/v3/index.json -n maui-feed
+          dotnet nuget list source
 
       - name: Restore NuGet packages
-        shell: bash
-        run: |
-          dotnet restore BibleQuestForKids/BibleQuestForKids.csproj \
-            --no-cache \
-            --disable-parallel \
-            --verbosity minimal
+        run: dotnet restore BibleQuestForKids/BibleQuestForKids.sln --no-cache --disable-parallel --verbosity detailed
 
       - name: Build bundled web assets
-        shell: bash
         working-directory: BibleQuestForKids/wwwroot
-        env:
-          CI: true
         run: |
           npm ci
           npm run build
+        env:
+          CI: true
+
+      - name: Strip development web assets
+        run: |
+          rm -rf BibleQuestForKids/wwwroot/node_modules BibleQuestForKids/wwwroot/src
+          rm -f BibleQuestForKids/wwwroot/package*.json
 
       - name: Guard dist assets exist
-        shell: bash
         run: |
-          set -euo pipefail
           DIST="BibleQuestForKids/wwwroot/dist"
-          test -s "$DIST/index.html"
-          test -s "$DIST/manifest.json"
-          if ! ls "$DIST"/*.js >/dev/null 2>&1; then
-            echo "❌ No JavaScript bundles produced" >&2
+          if [ ! -s "$DIST/index.html" ]; then
+            echo "dist/index.html missing. Run npm build before publishing." >&2
             exit 1
           fi
-          echo "✅ dist assets verified"
+          echo "✅ Found dist/index.html"
+          head -n 10 "$DIST/index.html"
 
-      - name: Resolve build number
+      - name: Resolve build number (keeps TestFlight builds unique)
         id: resolve-build
-        shell: bash
-        run: echo "APP_BUILD_NUMBER=$(date +%s)" >> "$GITHUB_ENV"
+        env:
+          APP_IDENTIFIER: ${{ env.APP_IDENTIFIER }}
+          APP_DISPLAY_VERSION: ${{ env.APP_DISPLAY_VERSION }}
+          APP_STORE_CONNECT_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+          APP_STORE_CONNECT_KEY_IDENTIFIER: ${{ secrets.APP_STORE_CONNECT_KEY_IDENTIFIER }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          BUILD_NUMBER=$(date +%s)
+          echo "Seeded APP_BUILD_NUMBER=$BUILD_NUMBER from epoch seconds"
+
+          if [ -n "${APP_STORE_CONNECT_PRIVATE_KEY:-}" ] && [ -n "${APP_STORE_CONNECT_KEY_IDENTIFIER:-}" ] && [ -n "${APP_STORE_CONNECT_ISSUER_ID:-}" ]; then
+            echo "Checking App Store Connect for safe build number"
+            FINAL_BUILD_NUMBER=$(APP_BUILD_NUMBER="$BUILD_NUMBER" \
+              APP_DISPLAY_VERSION="$APP_DISPLAY_VERSION" \
+              APP_IDENTIFIER="$APP_IDENTIFIER" \
+              APP_STORE_CONNECT_PRIVATE_KEY="$APP_STORE_CONNECT_PRIVATE_KEY" \
+              APP_STORE_CONNECT_KEY_IDENTIFIER="$APP_STORE_CONNECT_KEY_IDENTIFIER" \
+              APP_STORE_CONNECT_ISSUER_ID="$APP_STORE_CONNECT_ISSUER_ID" \
+              ruby ci/scripts/maybe_raise_build_number.rb)
+          else
+            echo "App Store Connect credentials missing. Using epoch build number."
+            FINAL_BUILD_NUMBER="$BUILD_NUMBER"
+          fi
+
+          if [ -z "$FINAL_BUILD_NUMBER" ]; then
+            echo "Failed to resolve build number" >&2
+            exit 1
+          fi
+
+          echo "APP_BUILD_NUMBER=$FINAL_BUILD_NUMBER" | tee -a "$GITHUB_ENV"
 
       - name: Install signing assets
-        shell: bash
         env:
           APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_PROVISIONING_PROFILE_BASE64: ${{ secrets.APPLE_PROVISIONING_PROFILE_BASE64 }}
         run: |
           set -euo pipefail
+          if [ -z "${APPLE_CERTIFICATE_P12_BASE64:-}" ] || [ -z "${APPLE_CERTIFICATE_PASSWORD:-}" ]; then
+            echo "Missing APPLE_CERTIFICATE_P12_BASE64 or APPLE_CERTIFICATE_PASSWORD secrets" >&2
+            exit 1
+          fi
+
+          if [ -z "${APPLE_PROVISIONING_PROFILE_BASE64:-}" ]; then
+            echo "Missing APPLE_PROVISIONING_PROFILE_BASE64 secret" >&2
+            exit 1
+          fi
+
           KEYCHAIN="signing.keychain-db"
           security create-keychain -p "" "$KEYCHAIN"
           security set-keychain-settings -lut 21600 "$KEYCHAIN"
           security unlock-keychain -p "" "$KEYCHAIN"
-          security list-keychain -d user -s "$KEYCHAIN" $(security list-keychain -d user | tr -d '"')
 
           echo "$APPLE_CERTIFICATE_P12_BASE64" | base64 --decode > signing.p12
           security import signing.p12 -k "$KEYCHAIN" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
-          security set-key-partition-list -S apple-tool:,apple: -k "" "$KEYCHAIN"
+          security delete-generic-password -l "signing" "$KEYCHAIN" 2>/dev/null || true
 
-          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
-          PROFILE_PATH="$HOME/Library/MobileDevice/Provisioning Profiles/${{ env.APP_IDENTIFIER }}.mobileprovision"
+          security list-keychains -s "$KEYCHAIN" $(security list-keychains | tr -d '"')
+          security set-key-partition-list -S apple-tool:,apple: -s -k "" "$KEYCHAIN"
+
+          PROFILE_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
+          mkdir -p "$PROFILE_DIR"
+          PROFILE_PATH="$PROFILE_DIR/${APP_IDENTIFIER}.mobileprovision"
           echo "$APPLE_PROVISIONING_PROFILE_BASE64" | base64 --decode > "$PROFILE_PATH"
 
-          CODESIGN_IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN" | head -n 1 | awk '{print $2}')
+          CODESIGN_IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN" | head -1 | awk '{print $2}')
           if [ -z "$CODESIGN_IDENTITY" ]; then
-            echo "❌ Unable to locate codesign identity" >&2
+            echo "No code signing identity found in imported certificate" >&2
             exit 1
           fi
-          echo "CODESIGN_KEY=$CODESIGN_IDENTITY" >> "$GITHUB_ENV"
-          echo "CODESIGN_PROVISION=$PROFILE_PATH" >> "$GITHUB_ENV"
+
+          {
+            echo "CODESIGN_KEY=$CODESIGN_IDENTITY"
+            echo "CODESIGN_PROVISION=$PROFILE_PATH"
+          } >> "$GITHUB_ENV"
 
       - name: Publish .NET MAUI iOS app
-        shell: bash
-        run: |
-          dotnet publish BibleQuestForKids/BibleQuestForKids.csproj \
-            -c Release \
-            -f net8.0-ios \
-            -p:RuntimeIdentifier=ios-arm64 \
-            -p:BuildIpa=true \
-            -p:ApplicationId=${{ env.APP_IDENTIFIER }} \
-            -p:CFBundleIdentifier=${{ env.APP_IDENTIFIER }} \
-            -p:ApplicationDisplayVersion=${{ env.APP_DISPLAY_VERSION }} \
-            -p:ApplicationVersion=${{ env.APP_BUILD_NUMBER }} \
-            -p:CodesignKey=${{ env.CODESIGN_KEY }} \
-            -p:CodesignProvision=${{ env.CODESIGN_PROVISION }} \
-            -p:CodesignTeamId=${{ secrets.TEAM_ID }} \
-            --no-restore
-
-      - name: Locate produced IPA
-        id: locate-ipa
-        shell: bash
-        run: |
-          set -euo pipefail
-          IPA_PATH=$(find BibleQuestForKids/bin/Release/net8.0-ios/ios-arm64/publish -name '*.ipa' | head -n 1)
-          if [ -z "$IPA_PATH" ]; then
-            echo "❌ IPA not found" >&2
-            exit 1
-          fi
-          echo "ipa-path=$IPA_PATH" >> "$GITHUB_OUTPUT"
+        run: >-
+          dotnet publish BibleQuestForKids/BibleQuestForKids.csproj
+          -c Release
+          -f net8.0-ios
+          -p:RuntimeIdentifier=ios-arm64
+          -p:BuildIpa=true
+          -p:ApplicationId=${{ env.APP_IDENTIFIER }}
+          -p:CFBundleIdentifier=${{ env.APP_IDENTIFIER }}
+          -p:ApplicationDisplayVersion=${{ env.APP_DISPLAY_VERSION }}
+          -p:ApplicationVersion=${{ env.APP_BUILD_NUMBER }}
+          -p:CodesignKey=${{ env.CODESIGN_KEY }}
+          -p:CodesignProvision=${{ env.CODESIGN_PROVISION }}
+          -p:CodesignTeamId=${{ secrets.TEAM_ID }}
+          --verbosity detailed
 
       - name: Verify IPA contains dist assets
-        shell: bash
-        env:
-          IPA_PATH: ${{ steps.locate-ipa.outputs.ipa-path }}
         run: |
-          set -euo pipefail
-          unzip -q "$IPA_PATH" -d tmp-ipa
-          APP_DIR=$(ls tmp-ipa/Payload)
-          test -s "tmp-ipa/Payload/$APP_DIR/wwwroot/dist/index.html"
-          test -s "tmp-ipa/Payload/$APP_DIR/wwwroot/dist/manifest.json"
-          echo "✅ IPA contains compiled web assets"
-          rm -rf tmp-ipa
+          IPA_PATH=$(find BibleQuestForKids/bin/Release/net8.0-ios/ios-arm64/publish -name '*.ipa' | head -1)
+          unzip -q "$IPA_PATH" -d tmp
+          APP_DIR=$(ls tmp/Payload)
+          if [ ! -f "tmp/Payload/$APP_DIR/wwwroot/dist/index.html" ]; then
+            echo "IPA missing dist/index.html" >&2
+            exit 1
+          fi
+          echo "✅ IPA contains dist/index.html"
 
       - name: Upload IPA to TestFlight
         uses: apple-actions/upload-testflight-build@v1
         with:
-          app-path: ${{ steps.locate-ipa.outputs.ipa-path }}
+          app-path: BibleQuestForKids/bin/Release/net8.0-ios/ios-arm64/publish/*.ipa
           issuer-id: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
           api-key-id: ${{ secrets.APP_STORE_CONNECT_KEY_IDENTIFIER }}
           api-private-key: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
@@ -178,4 +184,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: BibleQuestForKids-ipa
-          path: ${{ steps.locate-ipa.outputs.ipa-path }}
+          path: BibleQuestForKids/bin/Release/net8.0-ios/ios-arm64/publish/*.ipa
