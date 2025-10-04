@@ -1,31 +1,27 @@
-<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
-    <!-- Target both iOS and Android -->
     <TargetFrameworks>net8.0-android;net8.0-ios</TargetFrameworks>
     <OutputType>Exe</OutputType>
     <RootNamespace>BibleQuestForKids</RootNamespace>
-
-    <!-- Enable MAUI & Blazor Hybrid Support -->
     <UseMaui>true</UseMaui>
     <SingleProject>true</SingleProject>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
 
-    <!-- App Info -->
+    <!-- App metadata -->
     <ApplicationTitle>Bible Quest for Kids</ApplicationTitle>
     <ApplicationId>app.biblequest</ApplicationId>
     <ApplicationVersion>1.1.0</ApplicationVersion>
     <ApplicationDisplayVersion>1.1.0</ApplicationDisplayVersion>
 
-    <!-- 👇 Critical for Blazor Hybrid -->
-    <UsingMicrosoftNETSdkWeb>true</UsingMicrosoftNETSdkWeb>
+    <!-- Hybrid build flags -->
     <EnableDefaultStaticWebAssets>true</EnableDefaultStaticWebAssets>
     <BlazorWebViewEnableDefaultStyles>false</BlazorWebViewEnableDefaultStyles>
 
-    <!-- iOS build tweaks -->
-    <MtouchEnableBitcode>false</MtouchEnableBitcode>
+    <!-- iOS-specific -->
     <RuntimeIdentifier>ios-arm64</RuntimeIdentifier>
+    <MtouchEnableBitcode>false</MtouchEnableBitcode>
   </PropertyGroup>
 
   <!-- Fonts -->
@@ -50,15 +46,16 @@
     <MauiAsset Include="wwwroot\**" LogicalName="wwwroot\%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 
-  <!-- Ensure dist build output is copied into app -->
+  <!-- Copy web build output into the app -->
   <Target Name="CopyDistToOutput" AfterTargets="Build">
     <ItemGroup>
       <DistFiles Include="wwwroot/dist/**" />
     </ItemGroup>
-    <Copy SourceFiles="@(DistFiles)"
-          DestinationFolder="$(OutDir)\wwwroot\dist\%(RecursiveDir)"
-          SkipUnchangedFiles="true"
-          Condition="Exists('wwwroot/dist')" />
+    <Copy
+      SourceFiles="@(DistFiles)"
+      DestinationFolder="$(OutDir)\wwwroot\dist\%(RecursiveDir)"
+      SkipUnchangedFiles="true"
+      Condition="Exists('wwwroot/dist')" />
   </Target>
 
 </Project>
