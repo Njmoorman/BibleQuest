@@ -30,18 +30,18 @@ jobs:
 
       - name: Configure NuGet sources
         run: |
+          echo "🧩 Configuring NuGet feeds"
           dotnet nuget list source || true
           dotnet nuget remove source nuget-org || true
           dotnet nuget remove source maui-feed || true
           dotnet nuget add source https://api.nuget.org/v3/index.json -n nuget-org
           dotnet nuget add source https://aka.ms/dotnet8/nuget/index.json -n dotnet8
-          dotnet nuget add source https://pkgs.dev.azure.com/dnceng/public/_packaging/maui/nuget/v3/index.json -n maui-feed
           dotnet nuget list source
 
       - name: Install MAUI workloads
         run: |
-          dotnet workload restore
-          dotnet workload install maui ios --ignore-failed-sources
+          echo "📦 Installing MAUI iOS workloads from official feed"
+          dotnet workload install maui-ios --source https://aka.ms/dotnet8/nuget/index.json --skip-sign-check
           dotnet workload list
 
       - name: Restore NuGet packages
