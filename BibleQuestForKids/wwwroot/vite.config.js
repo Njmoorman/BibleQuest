@@ -2,15 +2,14 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { resolve } from "path";
 
-// ✅ Bible Quest for Kids — unified config for MAUI + WebView integration
 export default defineConfig({
   plugins: [react()],
-  root: ".", // project root for npm run build
-  base: "./", // ensures relative paths work inside MAUI wwwroot
+  root: ".",             // same directory as index.html
+  base: "./",            // relative paths for MAUI embedding
   build: {
-    outDir: "dist", // must match workflow path
+    outDir: "dist",
     emptyOutDir: true,
-    assetsDir: "assets",
+    manifest: true,      // 👈 required for index.html manifest lookup
     rollupOptions: {
       input: resolve(__dirname, "index.html"),
       output: {
