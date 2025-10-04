@@ -1,27 +1,37 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
+import { fileURLToPath } from 'url'
 
-// https://vite.dev/config/
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+
 export default defineConfig({
-  // Build relative paths so the bundled assets work when loaded from
-  // the on-device file system (e.g., TestFlight installs).
   base: './',
   plugins: [react()],
   server: {
-    allowedHosts: true
+    allowedHosts: true,
   },
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src'),
+      '@': path.resolve(__dirname, 'src'),
     },
-    extensions: ['.mjs', '.js', '.jsx', '.ts', '.tsx', '.json']
+    extensions: ['.mjs', '.js', '.jsx', '.ts', '.tsx', '.json'],
   },
   optimizeDeps: {
     esbuildOptions: {
       loader: {
         '.js': 'jsx',
       },
+    },
+  },
+  build: {
+    outDir: 'dist',
+    emptyOutDir: true,
+    manifest: true,
+    sourcemap: false,
+    rollupOptions: {
+      input: path.resolve(__dirname, 'src/main.jsx'),
     },
   },
 })

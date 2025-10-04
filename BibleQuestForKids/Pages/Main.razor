@@ -1,4 +1,6 @@
 @page "/"
+@using Microsoft.JSInterop
+@inject IJSRuntime JS
 
 <h1>Bible Quest for Kids</h1>
 
@@ -11,21 +13,20 @@
 </div>
 
 @code {
-    [Inject] IJSRuntime JS { get; set; } = default!;
-
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender)
+        if (!firstRender)
         {
-            try
-            {
-                // Call the JS bootstrapper in wwwroot/index.html
-                await JS.InvokeVoidAsync("BibleQuest.loadReactApp");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"React bootstrap failed: {ex.Message}");
-            }
+            return;
+        }
+
+        try
+        {
+            await JS.InvokeVoidAsync("BibleQuest.loadReactApp");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"React bootstrap failed: {ex.Message}");
         }
     }
 }
