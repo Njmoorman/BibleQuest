@@ -1,30 +1,40 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <!-- Target both iOS and Android -->
     <TargetFrameworks>net8.0-android;net8.0-ios</TargetFrameworks>
     <OutputType>Exe</OutputType>
     <RootNamespace>BibleQuestForKids</RootNamespace>
+
+    <!-- Enable MAUI & Blazor Hybrid Support -->
     <UseMaui>true</UseMaui>
     <SingleProject>true</SingleProject>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
 
+    <!-- App Info -->
     <ApplicationTitle>Bible Quest for Kids</ApplicationTitle>
     <ApplicationId>app.biblequest</ApplicationId>
     <ApplicationVersion>1.1.0</ApplicationVersion>
     <ApplicationDisplayVersion>1.1.0</ApplicationDisplayVersion>
 
-    <!-- 👇 Required so StaticWebAssetsPrepareForRun works -->
+    <!-- 👇 Critical for Blazor Hybrid -->
     <UsingMicrosoftNETSdkWeb>true</UsingMicrosoftNETSdkWeb>
+    <EnableDefaultStaticWebAssets>true</EnableDefaultStaticWebAssets>
+    <BlazorWebViewEnableDefaultStyles>false</BlazorWebViewEnableDefaultStyles>
+
+    <!-- iOS build tweaks -->
+    <MtouchEnableBitcode>false</MtouchEnableBitcode>
+    <RuntimeIdentifier>ios-arm64</RuntimeIdentifier>
   </PropertyGroup>
 
-  <!-- ✅ Fonts -->
+  <!-- Fonts -->
   <ItemGroup>
     <MauiFont Include="Resources/Fonts/OpenSans-Regular.ttf" Alias="OpenSansRegular" />
     <MauiFont Include="Resources/Fonts/OpenSans-Semibold.ttf" Alias="OpenSansSemibold" />
   </ItemGroup>
 
-  <!-- ✅ Core MAUI + Blazor WebView packages -->
+  <!-- NuGet Packages -->
   <ItemGroup>
     <PackageReference Include="Microsoft.Maui.Controls" Version="8.0.60" />
     <PackageReference Include="Microsoft.Maui.Controls.Compatibility" Version="8.0.60" />
@@ -32,17 +42,23 @@
     <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="8.0.60" />
   </ItemGroup>
 
-  <!-- ✅ Images, splash, raw assets -->
+  <!-- Assets -->
   <ItemGroup>
     <MauiImage Include="Resources\Images\*" />
     <MauiSplashScreen Include="Resources\Splash\*" />
     <MauiAsset Include="Resources\Raw\**" />
+    <MauiAsset Include="wwwroot\**" LogicalName="wwwroot\%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 
-  <!-- ✅ Ensure web assets (Blazor + React dist) are published -->
-  <ItemGroup>
-    <MauiAsset Include="wwwroot\**"
-               LogicalName="wwwroot\%(RecursiveDir)%(Filename)%(Extension)" />
-  </ItemGroup>
+  <!-- Ensure dist build output is copied into app -->
+  <Target Name="CopyDistToOutput" AfterTargets="Build">
+    <ItemGroup>
+      <DistFiles Include="wwwroot/dist/**" />
+    </ItemGroup>
+    <Copy SourceFiles="@(DistFiles)"
+          DestinationFolder="$(OutDir)\wwwroot\dist\%(RecursiveDir)"
+          SkipUnchangedFiles="true"
+          Condition="Exists('wwwroot/dist')" />
+  </Target>
 
 </Project>
