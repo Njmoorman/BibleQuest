@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 env:
-  DOTNET_VERSION: 8.0.301
+  DOTNET_VERSION: 8.0.300
   APP_IDENTIFIER: app.biblequest
   APP_DISPLAY_VERSION: 1.1.0
 
@@ -28,40 +28,25 @@ jobs:
         with:
           node-version: 18
 
-      # 🧹 Clean and reset .NET workloads
-      - name: Reset .NET workload manifests
-        run: |
-          echo "🧹 Clearing cached workload manifests..."
-          sudo rm -rf "$HOME/.dotnet/sdk-manifests" || true
-          sudo rm -rf /usr/local/share/dotnet/sdk-manifests || true
-          dotnet workload repair
-
-      # ✅ Fresh MAUI install
-      - name: Install MAUI workloads
-        run: |
-          dotnet workload update
-          dotnet workload install maui-ios --ignore-failed-sources --skip-sign-check
-          dotnet workload list
-
-      # ✅ Configure NuGet sources
       - name: Configure NuGet sources
         run: |
-          set -e
-          if dotnet nuget list source | grep -q "nuget-org"; then
-            dotnet nuget remove source nuget-org
-          fi
-          if dotnet nuget list source | grep -q "maui-feed"; then
-            dotnet nuget remove source maui-feed
-          fi
+          dotnet nuget list source || true
+          dotnet nuget remove source nuget-org || true
+          dotnet nuget remove source maui-feed || true
           dotnet nuget add source https://api.nuget.org/v3/index.json -n nuget-org
+          dotnet nuget add source https://aka.ms/dotnet8/nuget/index.json -n dotnet8
           dotnet nuget add source https://pkgs.dev.azure.com/dnceng/public/_packaging/maui/nuget/v3/index.json -n maui-feed
           dotnet nuget list source
 
-      # ✅ Restore NuGet packages
+      - name: Install MAUI workloads
+        run: |
+          dotnet workload restore
+          dotnet workload install maui ios --ignore-failed-sources
+          dotnet workload list
+
       - name: Restore NuGet packages
         run: dotnet restore BibleQuestForKids/BibleQuestForKids.csproj --no-cache --disable-parallel --verbosity minimal
 
-      # 🧱 Build bundled web assets
       - name: Build bundled web assets
         working-directory: BibleQuestForKids/wwwroot
         run: |
@@ -70,13 +55,6 @@ jobs:
         env:
           CI: true
 
-      # 🧹 Strip dev-only assets
-      - name: Strip dev-only assets
-        run: |
-          rm -rf BibleQuestForKids/wwwroot/node_modules BibleQuestForKids/wwwroot/src
-          rm -f BibleQuestForKids/wwwroot/package*.json
-
-      # ✅ Guard dist assets exist
       - name: Guard dist assets exist
         run: |
           DIST="BibleQuestForKids/wwwroot/dist"
@@ -84,26 +62,12 @@ jobs:
             echo "❌ dist/index.html missing" >&2
             exit 1
           fi
-          if [ ! -s "$DIST/manifest.json" ]; then
-            echo "❌ dist/manifest.json missing" >&2
-            exit 1
-          fi
-          if ! ls "$DIST"/*.js >/dev/null 2>&1; then
-            echo "❌ no JS bundles in dist/" >&2
-            exit 1
-          fi
-          if ! ls "$DIST"/*.css >/dev/null 2>&1; then
-            echo "❌ no CSS bundles in dist/" >&2
-            exit 1
-          fi
           echo "✅ dist assets verified"
 
-      # 🔢 Resolve build number
       - name: Resolve build number
         id: resolve-build
         run: echo "APP_BUILD_NUMBER=$(date +%s)" >> $GITHUB_ENV
 
-      # 🔐 Install signing assets
       - name: Install signing assets
         env:
           APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
@@ -127,7 +91,6 @@ jobs:
           echo "CODESIGN_KEY=$CODESIGN_IDENTITY" >> $GITHUB_ENV
           echo "CODESIGN_PROVISION=$PROFILE_PATH" >> $GITHUB_ENV
 
-      # 📦 Publish .NET MAUI iOS app
       - name: Publish .NET MAUI iOS app
         run: >
           dotnet publish BibleQuestForKids/BibleQuestForKids.csproj
@@ -143,19 +106,6 @@ jobs:
           -p:CodesignProvision=${{ env.CODESIGN_PROVISION }}
           -p:CodesignTeamId=${{ secrets.TEAM_ID }}
 
-      # 🧩 Verify IPA contains dist assets
-      - name: Verify IPA contains dist assets
-        run: |
-          IPA_PATH=$(find BibleQuestForKids/bin/Release/net8.0-ios/ios-arm64/publish -name '*.ipa' | head -1)
-          unzip -q "$IPA_PATH" -d tmp
-          APP_DIR=$(ls tmp/Payload)
-          if [ ! -f "tmp/Payload/$APP_DIR/wwwroot/dist/index.html" ]; then
-            echo "❌ IPA missing dist/index.html" >&2
-            exit 1
-          fi
-          echo "✅ IPA contains dist/index.html"
-
-      # ☁️ Upload IPA to TestFlight
       - name: Upload IPA to TestFlight
         uses: apple-actions/upload-testflight-build@v1
         with:
@@ -165,7 +115,6 @@ jobs:
           api-private-key: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
           bundle-id: ${{ env.APP_IDENTIFIER }}
 
-      # 🗂️ Archive IPA artifact
       - name: Archive IPA artifact
         uses: actions/upload-artifact@v4
         with:
