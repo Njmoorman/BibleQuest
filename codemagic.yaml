@@ -1,156 +1,141 @@
-name: iOS Build & Deploy (Bible Quest for Kids)
-
-on:
-  push:
-    branches: [ "main" ]
-  workflow_dispatch:
-
-env:
-  DOTNET_VERSION: 8.0.301
-  APP_IDENTIFIER: app.biblequest
-  APP_DISPLAY_VERSION: 1.1.0
-
-jobs:
-  build:
-    runs-on: macos-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup .NET SDK
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 18
-
+workflows:
+  ios-maui:
+    name: "iOS Build & Deploy (Bible Quest for Kids)"
+    max_build_duration: 120
+    instance_type: mac_mini_m2
+    environment:
+      xcode: 16.2
+      node: 18
+      vars:
+        DOTNET_VERSION: 8.0.300
+        APP_IDENTIFIER: app.biblequest
+        APP_DISPLAY_VERSION: 1.1.0
+      groups:
+        - app_store_connect
+        - ios_signing
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: main
+          include: true
+          source: true
+    cache:
+      cache_paths:
+        - ~/.nuget/packages
+        - BibleQuestForKids/wwwroot/node_modules
+    scripts:
+      - name: Install .NET SDK
+        script: |
+          set -euo pipefail
+          export DOTNET_ROOT="$HOME/.dotnet"
+          mkdir -p "$DOTNET_ROOT"
+          curl -fsSL https://dot.net/v1/dotnet-install.sh | bash /dev/stdin --version "$DOTNET_VERSION" --install-dir "$DOTNET_ROOT"
+          export PATH="$DOTNET_ROOT:$DOTNET_ROOT/tools:$PATH"
+          dotnet --info
       - name: Install MAUI workloads
-        run: dotnet workload install maui-ios --skip-manifest-update
-
-      - name: Configure NuGet sources
-        run: |
-          set -e
-          if dotnet nuget list source | grep -q "nuget-org"; then
-            dotnet nuget remove source nuget-org
-          fi
-          if dotnet nuget list source | grep -q "maui-feed"; then
-            dotnet nuget remove source maui-feed
-          fi
-          dotnet nuget add source https://api.nuget.org/v3/index.json -n nuget-org
-          dotnet nuget add source https://pkgs.dev.azure.com/dnceng/public/_packaging/maui/nuget/v3/index.json -n maui-feed
-          dotnet nuget list source
-
-      # 👇 New step to prevent stale caches
-      - name: Clean before restore
-        run: |
-          dotnet clean BibleQuestForKids/BibleQuestForKids.csproj -c Release
-          rm -rf ~/.nuget/packages
-
+        script: |
+          set -euo pipefail
+          dotnet workload install maui-ios \
+            --source https://aka.ms/dotnet8/nuget/index.json \
+            --skip-sign-check
       - name: Restore NuGet packages
-        run: dotnet restore BibleQuestForKids/BibleQuestForKids.csproj --no-cache --disable-parallel --verbosity minimal
-
+        script: |
+          set -euo pipefail
+          dotnet restore BibleQuestForKids/BibleQuestForKids.csproj \
+            --no-cache \
+            --disable-parallel \
+            --verbosity minimal
       - name: Build bundled web assets
-        working-directory: BibleQuestForKids/wwwroot
-        run: |
+        script: |
+          set -euo pipefail
+          pushd BibleQuestForKids/wwwroot
           npm ci
           npm run build
-        env:
-          CI: true
-
-      - name: Strip dev-only assets
-        run: |
+          popd
+      - name: Strip dev-only node assets
+        script: |
+          set -euo pipefail
           rm -rf BibleQuestForKids/wwwroot/node_modules BibleQuestForKids/wwwroot/src
-          rm -f BibleQuestForKids/wwwroot/package*.json
-
+          rm -f BibleQuestForKids/wwwroot/package*.json BibleQuestForKids/wwwroot/vite.config.js BibleQuestForKids/wwwroot/tsconfig*.json
+          rm -f BibleQuestForKids/wwwroot/postcss.config.js BibleQuestForKids/wwwroot/tailwind.config.js BibleQuestForKids/wwwroot/eslint.config.js BibleQuestForKids/wwwroot/jsconfig.json BibleQuestForKids/wwwroot/components.json
       - name: Guard dist assets exist
-        run: |
+        script: |
+          set -euo pipefail
           DIST="BibleQuestForKids/wwwroot/dist"
-          if [ ! -s "$DIST/index.html" ]; then
-            echo "❌ dist/index.html missing" >&2
-            exit 1
-          fi
-          if [ ! -s "$DIST/manifest.json" ]; then
-            echo "❌ dist/manifest.json missing" >&2
-            exit 1
-          fi
+          test -s "$DIST/index.html"
+          test -s "$DIST/manifest.json"
           if ! ls "$DIST"/*.js >/dev/null 2>&1; then
-            echo "❌ no JS bundles in dist/" >&2
+            echo "❌ No JavaScript bundles produced" >&2
             exit 1
           fi
           if ! ls "$DIST"/*.css >/dev/null 2>&1; then
-            echo "❌ no CSS bundles in dist/" >&2
+            echo "❌ No CSS bundles produced" >&2
             exit 1
           fi
-          echo "✅ dist assets verified"
-
       - name: Resolve build number
-        id: resolve-build
-        run: echo "APP_BUILD_NUMBER=$(date +%s)" >> $GITHUB_ENV
-
+        script: |
+          set -euo pipefail
+          echo "APP_BUILD_NUMBER=$(date +%s)" >> "$CM_ENV"
       - name: Install signing assets
-        env:
-          APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_PROVISIONING_PROFILE_BASE64: ${{ secrets.APPLE_PROVISIONING_PROFILE_BASE64 }}
-        run: |
+        script: |
           set -euo pipefail
           KEYCHAIN="signing.keychain-db"
           security create-keychain -p "" "$KEYCHAIN"
           security set-keychain-settings -lut 21600 "$KEYCHAIN"
           security unlock-keychain -p "" "$KEYCHAIN"
+          security list-keychain -d user -s "$KEYCHAIN" $(security list-keychain -d user | tr -d '"')
 
           echo "$APPLE_CERTIFICATE_P12_BASE64" | base64 --decode > signing.p12
           security import signing.p12 -k "$KEYCHAIN" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple: -k "" "$KEYCHAIN"
 
           mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
-          PROFILE_PATH="$HOME/Library/MobileDevice/Provisioning Profiles/${{ env.APP_IDENTIFIER }}.mobileprovision"
+          PROFILE_PATH="$HOME/Library/MobileDevice/Provisioning Profiles/${APP_IDENTIFIER}.mobileprovision"
           echo "$APPLE_PROVISIONING_PROFILE_BASE64" | base64 --decode > "$PROFILE_PATH"
 
-          CODESIGN_IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN" | head -1 | awk '{print $2}')
-          echo "CODESIGN_KEY=$CODESIGN_IDENTITY" >> $GITHUB_ENV
-          echo "CODESIGN_PROVISION=$PROFILE_PATH" >> $GITHUB_ENV
-
-      - name: Publish .NET MAUI iOS app
-        run: >
-          dotnet publish BibleQuestForKids/BibleQuestForKids.csproj
-          -c Release
-          -f net8.0-ios
-          -p:RuntimeIdentifier=ios-arm64
-          -p:BuildIpa=true
-          -p:ApplicationId=${{ env.APP_IDENTIFIER }}
-          -p:CFBundleIdentifier=${{ env.APP_IDENTIFIER }}
-          -p:ApplicationDisplayVersion=${{ env.APP_DISPLAY_VERSION }}
-          -p:ApplicationVersion=${{ env.APP_BUILD_NUMBER }}
-          -p:CodesignKey=${{ env.CODESIGN_KEY }}
-          -p:CodesignProvision=${{ env.CODESIGN_PROVISION }}
-          -p:CodesignTeamId=${{ secrets.TEAM_ID }}
-
-      - name: Verify IPA contains dist assets
-        run: |
-          IPA_PATH=$(find BibleQuestForKids/bin/Release/net8.0-ios/ios-arm64/publish -name '*.ipa' | head -1)
-          unzip -q "$IPA_PATH" -d tmp
-          APP_DIR=$(ls tmp/Payload)
-          if [ ! -f "tmp/Payload/$APP_DIR/wwwroot/dist/index.html" ]; then
-            echo "❌ IPA missing dist/index.html" >&2
+          CODESIGN_IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN" | head -n 1 | awk '{print $2}')
+          if [ -z "$CODESIGN_IDENTITY" ]; then
+            echo "❌ Unable to locate codesign identity" >&2
             exit 1
           fi
-          echo "✅ IPA contains dist/index.html"
-
-      - name: Upload IPA to TestFlight
-        uses: apple-actions/upload-testflight-build@v1
-        with:
-          app-path: BibleQuestForKids/bin/Release/net8.0-ios/ios-arm64/publish/*.ipa
-          issuer-id: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-          api-key-id: ${{ secrets.APP_STORE_CONNECT_KEY_IDENTIFIER }}
-          api-private-key: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
-          bundle-id: ${{ env.APP_IDENTIFIER }}
-
-      - name: Archive IPA artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: BibleQuestForKids-ipa
-          path: BibleQuestForKids/bin/Release/net8.0-ios/ios-arm64/publish/*.ipa
+          echo "CODESIGN_KEY=$CODESIGN_IDENTITY" >> "$CM_ENV"
+          echo "CODESIGN_PROVISION=$PROFILE_PATH" >> "$CM_ENV"
+      - name: Publish .NET MAUI iOS app
+        script: |
+          set -euo pipefail
+          export PATH="$HOME/.dotnet:$HOME/.dotnet/tools:$PATH"
+          dotnet publish BibleQuestForKids/BibleQuestForKids.csproj \
+            -c Release \
+            -f net8.0-ios \
+            -p:RuntimeIdentifier=ios-arm64 \
+            -p:BuildIpa=true \
+            -p:ApplicationId=$APP_IDENTIFIER \
+            -p:CFBundleIdentifier=$APP_IDENTIFIER \
+            -p:ApplicationDisplayVersion=$APP_DISPLAY_VERSION \
+            -p:ApplicationVersion=$APP_BUILD_NUMBER \
+            -p:CodesignKey=$CODESIGN_KEY \
+            -p:CodesignProvision=$CODESIGN_PROVISION \
+            -p:CodesignTeamId=$TEAM_ID \
+            --no-restore
+      - name: Verify IPA contains dist assets
+        script: |
+          set -euo pipefail
+          IPA_PATH=$(find BibleQuestForKids/bin/Release/net8.0-ios/ios-arm64/publish -name '*.ipa' | head -n 1)
+          if [ -z "$IPA_PATH" ]; then
+            echo "❌ IPA not found" >&2
+            exit 1
+          fi
+          unzip -q "$IPA_PATH" -d tmp-ipa
+          APP_DIR=$(ls tmp-ipa/Payload)
+          test -s "tmp-ipa/Payload/$APP_DIR/wwwroot/dist/index.html"
+          test -s "tmp-ipa/Payload/$APP_DIR/wwwroot/dist/manifest.json"
+    artifacts:
+      - BibleQuestForKids/bin/Release/net8.0-ios/ios-arm64/publish/*.ipa
+    publishing:
+      app_store_connect:
+        auth: api_key
+        key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
+        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
+        private_key: $APP_STORE_CONNECT_PRIVATE_KEY
+        submit_to_testflight: true

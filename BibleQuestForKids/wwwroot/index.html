@@ -33,7 +33,9 @@
 
         namespace.ensureBlazorRuntime = async () => {
           if (!runtimeScript) {
-            console.info("BibleQuest: blazor.webview.js not present; skipping MAUI runtime probe.");
+            console.info(
+              "BibleQuest: blazor.webview.js not present; skipping MAUI runtime probe."
+            );
             return null;
           }
 
@@ -45,7 +47,7 @@
               const bootResponse = await fetch(bootUrl);
               if (!bootResponse.ok) {
                 throw new Error(
-                  `Blazor boot manifest fetch failed: ${bootResponse.status} ${bootResponse.statusText}`,
+                  `Blazor boot manifest fetch failed: ${bootResponse.status} ${bootResponse.statusText}`
                 );
               }
 
@@ -66,7 +68,7 @@
             return;
           }
 
-          const manifestUrl = new URL("./manifest.json", window.location.href);
+          const manifestUrl = new URL("./dist/manifest.json", window.location.href);
 
           try {
             if (runtimeScript) {
@@ -79,13 +81,14 @@
 
             const manifest = await manifestResponse.json();
             const manifestValues = Object.values(manifest ?? {});
-            const entry = manifest["src/main.jsx"] ?? manifestValues.find((item) => item && item.isEntry);
+            const entry =
+              manifest["src/main.jsx"] ?? manifestValues.find((item) => item && item.isEntry);
             if (!entry) {
               throw new Error("Unable to locate the React entry in dist/manifest.json.");
             }
 
             const ensureStylesheet = (relativePath) => {
-              const href = new URL(`./${relativePath}`, manifestUrl).href;
+              const href = new URL(relativePath, manifestUrl).href;
               if (document.querySelector(`link[data-react-bundle='${href}']`)) {
                 return;
               }
@@ -97,7 +100,7 @@
               document.head.appendChild(link);
             };
 
-            (entry.css ?? []).forEach((cssFile) => ensureStylesheet(cssFile));
+            (entry.css ?? []).forEach((cssFile) => ensureStylesheet(`./${cssFile}`));
 
             const bundleUrl = new URL(`./${entry.file}`, manifestUrl);
             await import(bundleUrl.href);
@@ -109,7 +112,6 @@
       })();
     </script>
 
-    <!-- ✅ Trigger React load -->
     <script>
       window.BibleQuest?.loadReactApp();
     </script>
