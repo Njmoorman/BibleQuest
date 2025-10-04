@@ -44,10 +44,10 @@ jobs:
       - name: Restore NuGet packages
         run: dotnet restore BibleQuestForKids/BibleQuestForKids.csproj --no-cache --disable-parallel --verbosity minimal
 
-      # 👇 Move MAUI workload install to AFTER restore, ensure iOS tooling exists
+      # ✅ Updated and hardened workload installation
       - name: Ensure MAUI workloads are installed
         run: |
-          dotnet workload restore
+          dotnet workload update
           dotnet workload install maui-ios --ignore-failed-sources --skip-sign-check
           dotnet workload list
 
