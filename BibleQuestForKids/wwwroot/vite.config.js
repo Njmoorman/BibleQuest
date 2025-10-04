@@ -1,37 +1,30 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
-import path from 'path'
-import { fileURLToPath } from 'url'
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import { resolve } from "path";
 
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
-
+// ✅ Bible Quest for Kids — unified config for MAUI + WebView integration
 export default defineConfig({
-  base: './',
   plugins: [react()],
-  server: {
-    allowedHosts: true,
-  },
-  resolve: {
-    alias: {
-      '@': path.resolve(__dirname, 'src'),
-    },
-    extensions: ['.mjs', '.js', '.jsx', '.ts', '.tsx', '.json'],
-  },
-  optimizeDeps: {
-    esbuildOptions: {
-      loader: {
-        '.js': 'jsx',
-      },
-    },
-  },
+  root: ".", // project root for npm run build
+  base: "./", // ensures relative paths work in MAUI wwwroot
   build: {
-    outDir: 'dist',
+    outDir: "dist", // must match pipeline expectations
     emptyOutDir: true,
-    manifest: true,
-    sourcemap: false,
+    assetsDir: "assets",
     rollupOptions: {
-      input: path.resolve(__dirname, 'src/main.jsx'),
-    },
+      input: resolve(__dirname, "index.html"),
+      output: {
+        assetFileNames: "assets/[name]-[hash][extname]",
+        chunkFileNames: "assets/[name]-[hash].js",
+        entryFileNames: "assets/[name]-[hash].js"
+      }
+    }
   },
-})
+  server: {
+    port: 5173,
+    open: false
+  },
+  preview: {
+    port: 4173
+  }
+});
