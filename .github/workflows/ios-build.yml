@@ -2,278 +2,143 @@ name: iOS Build & Deploy (Bible Quest for Kids)
 
 on:
   push:
-    branches: [ main ]
+    branches: [ "main" ]
   workflow_dispatch:
 
 env:
-  DOTNET_VERSION: '8.0.301'
+  DOTNET_VERSION: 8.0.301
   APP_IDENTIFIER: app.biblequest
-  APP_DISPLAY_VERSION: '1.1.0'
+  APP_DISPLAY_VERSION: 1.1.0
 
 jobs:
   build:
-    name: Build and upload TestFlight binary
-    runs-on: macos-14
+    runs-on: macos-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ✅ Pin to .NET 8 so workloads match
-      - name: Pin .NET SDK via global.json
-        run: |
-          set -euo pipefail
-          cat > global.json <<'EOF'
-          {
-            "sdk": { "version": "8.0.301", "rollForward": "disable" }
-          }
-          EOF
-          echo 'Wrote global.json (8.0.301, rollForward=disable)'
-
-      - name: Setup .NET SDK (8.0.301)
+      - name: Setup .NET SDK
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
-      - name: Verify pinned .NET SDK
-        run: |
-          set -euo pipefail
-          dotnet --version
-          dotnet --info | sed -n '1,60p'
-
-      - name: Capture runner diagnostics
-        run: |
-          set -euo pipefail
-          echo "Xcode: $(xcodebuild -version | paste -sd ' ' -)"
-          xcodebuild -showsdks
-
-      - name: Setup Node.js for web assets
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: 18
+
+      - name: Configure NuGet sources
+        run: |
+          set -e
+          if dotnet nuget list source | grep -q "nuget-org"; then
+            dotnet nuget remove source nuget-org
+          fi
+          if dotnet nuget list source | grep -q "maui-feed"; then
+            dotnet nuget remove source maui-feed
+          fi
+          dotnet nuget add source https://api.nuget.org/v3/index.json -n nuget-org
+          dotnet nuget add source https://pkgs.dev.azure.com/dnceng/public/_packaging/maui/nuget/v3/index.json -n maui-feed
+          dotnet nuget list source
+
+      - name: Restore NuGet packages
+        run: dotnet restore BibleQuestForKids/BibleQuestForKids.csproj --no-cache --disable-parallel --verbosity minimal
+
+      # 👇 Move MAUI workload install to AFTER restore, ensure iOS tooling exists
+      - name: Ensure MAUI workloads are installed
+        run: |
+          dotnet workload restore
+          dotnet workload install maui-ios --ignore-failed-sources --skip-sign-check
+          dotnet workload list
 
       - name: Build bundled web assets
         working-directory: BibleQuestForKids/wwwroot
-        env: { CI: 'true' }
         run: |
-          set -euo pipefail
           npm ci
           npm run build
-          echo '== dist/ contents after npm build =='
-          ls -al dist || true
+        env:
+          CI: true
 
-      - name: Strip development web assets before publishing
+      - name: Strip dev-only assets
         run: |
-          set -euo pipefail
           rm -rf BibleQuestForKids/wwwroot/node_modules BibleQuestForKids/wwwroot/src
           rm -f BibleQuestForKids/wwwroot/package*.json
-          echo 'Stripped development dependencies from wwwroot.'
 
       - name: Guard dist assets exist
         run: |
-          set -euo pipefail
-          DIST='BibleQuestForKids/wwwroot/dist'
-          test -s "$DIST/index.html"
-          echo '✅ Found dist/index.html'
-          head -n 8 "$DIST/index.html"
-
-      - name: Ensure NuGet.org feed is available
-        run: |
-          set -euo pipefail
-          if ! dotnet nuget list source | grep -q 'https://api.nuget.org/v3/index.json'; then
-            dotnet nuget add source https://api.nuget.org/v3/index.json -n nuget-org
+          DIST="BibleQuestForKids/wwwroot/dist"
+          if [ ! -s "$DIST/index.html" ]; then
+            echo "❌ dist/index.html missing" >&2
+            exit 1
           fi
-          dotnet nuget list source
-
-      - name: Install required MAUI workloads (for .NET 8)
-        run: |
-          set -euo pipefail
-          dotnet workload install maui-ios --skip-manifest-update
-          dotnet workload list
-
-      - name: Restore workloads declared by the project
-        run: |
-          set -euo pipefail
-          dotnet workload restore BibleQuestForKids/BibleQuestForKids.csproj
-
-      - name: Restore NuGet packages
-        run: |
-          set -euo pipefail
-          dotnet restore BibleQuestForKids/BibleQuestForKids.csproj --no-cache --disable-parallel
-          du -sh ~/.nuget/packages || true
+          if [ ! -s "$DIST/manifest.json" ]; then
+            echo "❌ dist/manifest.json missing" >&2
+            exit 1
+          fi
+          if ! ls "$DIST"/*.js >/dev/null 2>&1; then
+            echo "❌ no JS bundles in dist/" >&2
+            exit 1
+          fi
+          if ! ls "$DIST"/*.css >/dev/null 2>&1; then
+            echo "❌ no CSS bundles in dist/" >&2
+            exit 1
+          fi
+          echo "✅ dist assets verified"
 
       - name: Resolve build number
         id: resolve-build
-        env:
-          APP_STORE_CONNECT_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
-          APP_STORE_CONNECT_KEY_IDENTIFIER: ${{ secrets.APP_STORE_CONNECT_KEY_IDENTIFIER }}
-          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-        run: |
-          set -euo pipefail
-          BUILD_NUMBER=$(date +%s)
-          echo "APP_BUILD_NUMBER=$BUILD_NUMBER" >> "$GITHUB_ENV"
-          echo "Seeded APP_BUILD_NUMBER=$BUILD_NUMBER"
+        run: echo "APP_BUILD_NUMBER=$(date +%s)" >> $GITHUB_ENV
 
-      # 🔒 Signing setup
       - name: Install signing assets
         env:
           APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_PROVISIONING_PROFILE_BASE64: ${{ secrets.APPLE_PROVISIONING_PROFILE_BASE64 }}
-          TEAM_ID: ${{ secrets.TEAM_ID }}
         run: |
           set -euo pipefail
-          KEYCHAIN_PATH="$RUNNER_TEMP/signing.keychain-db"
-          security create-keychain -p '' "$KEYCHAIN_PATH"
-          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
-          security unlock-keychain -p '' "$KEYCHAIN_PATH"
-          security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
-          security default-keychain -s "$KEYCHAIN_PATH"
+          KEYCHAIN="signing.keychain-db"
+          security create-keychain -p "" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "" "$KEYCHAIN"
 
           echo "$APPLE_CERTIFICATE_P12_BASE64" | base64 --decode > signing.p12
-          security import signing.p12 -k "$KEYCHAIN_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
-          security set-key-partition-list -S apple-tool:,apple: -s -k '' "$KEYCHAIN_PATH"
+          security import signing.p12 -k "$KEYCHAIN" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
 
-          PROFILE_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
-          mkdir -p "$PROFILE_DIR"
-          PROFILE_PATH="$PROFILE_DIR/${APP_IDENTIFIER}.mobileprovision"
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+          PROFILE_PATH="$HOME/Library/MobileDevice/Provisioning Profiles/${{ env.APP_IDENTIFIER }}.mobileprovision"
           echo "$APPLE_PROVISIONING_PROFILE_BASE64" | base64 --decode > "$PROFILE_PATH"
 
-          # Certificate common name (e.g., "Apple Distribution: Jordy … (TEAMID)")
-          CODESIGN_COMMON_NAME=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | sed -n 's/.*"\(.*\)"/\1/p' | head -1)
-          if [ -z "$CODESIGN_COMMON_NAME" ]; then
-            echo 'No signing identity located in keychain.' >&2
-            security find-identity -v -p codesigning "$KEYCHAIN_PATH" || true
-            exit 1
-          fi
+          CODESIGN_IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN" | head -1 | awk '{print $2}')
+          echo "CODESIGN_KEY=$CODESIGN_IDENTITY" >> $GITHUB_ENV
+          echo "CODESIGN_PROVISION=$PROFILE_PATH" >> $GITHUB_ENV
 
-          # Provisioning profile UUID + Name
-          TMP_PLIST="$RUNNER_TEMP/profile.plist"
-          security cms -D -i "$PROFILE_PATH" > "$TMP_PLIST"
-          PROFILE_UUID=$(/usr/libexec/PlistBuddy -c 'Print UUID' "$TMP_PLIST")
-          PROFILE_NAME=$(/usr/libexec/PlistBuddy -c 'Print Name' "$TMP_PLIST")
-
-          {
-            echo "CODESIGN_KEY=$CODESIGN_COMMON_NAME"
-            echo "CODESIGN_PROVISION=$PROFILE_UUID"       # MAUI expects Name/UUID, not a path
-            echo "CODESIGN_PROVISION_NAME=$PROFILE_NAME"
-            echo "TEAM_ID=$TEAM_ID"
-          } >> "$GITHUB_ENV"
-
-      - name: Guard signing setup
-        run: |
-          set -euo pipefail
-          ls "$HOME/Library/MobileDevice/Provisioning Profiles"/*.mobileprovision >/dev/null
-          security find-identity -v -p codesigning | grep -q "${{ env.CODESIGN_KEY }}"
-          echo "✅ Using provisioning profile (UUID=${{ env.CODESIGN_PROVISION }}, Name=${{ env.CODESIGN_PROVISION_NAME }})"
-          echo "✅ Signing identity ${{ env.CODESIGN_KEY }} is available"
-
-      # 🧱 Pin bundle IDs at evaluation time
-      - name: Write Directory.Build.props (pin bundle IDs)
-        run: |
-          set -euo pipefail
-          cat > Directory.Build.props <<'EOF'
-          <Project>
-            <PropertyGroup>
-              <ApplicationId>$(BUNDLE_ID)</ApplicationId>
-              <BundleIdentifier>$(BUNDLE_ID)</BundleIdentifier>
-              <CFBundleIdentifier>$(BUNDLE_ID)</CFBundleIdentifier>
-              <AppBundleId>$(BUNDLE_ID)</AppBundleId>
-            </PropertyGroup>
-          </Project>
-          EOF
-          echo 'Wrote Directory.Build.props to pin identifiers.'
-
-      # ✅ Hard-write the Info.plist so no placeholder survives
-      - name: Patch Info.plist bundle id + versions
-        run: |
-          set -euo pipefail
-          PLIST="BibleQuestForKids/Platforms/iOS/Info.plist"
-          /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier ${APP_IDENTIFIER}" "$PLIST" || /usr/libexec/PlistBuddy -c "Add :CFBundleIdentifier string ${APP_IDENTIFIER}" "$PLIST"
-          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${APP_DISPLAY_VERSION}" "$PLIST" || true
-          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${APP_BUILD_NUMBER}" "$PLIST" || true
-          echo 'Patched Info.plist with concrete identifiers.'
-
-      - name: Show Info.plist (after patch)
-        run: |
-          set -euo pipefail
-          plutil -p BibleQuestForKids/Platforms/iOS/Info.plist
-          echo "Expecting Bundle ID: ${APP_IDENTIFIER}"
-          echo "Expecting Version  : ${APP_DISPLAY_VERSION}"
-          echo "Expecting Build    : ${APP_BUILD_NUMBER}"
-
-      # 🔎 Sanity: show evaluated properties
-      - name: Inject a one-off MSBuild target to print identifiers
-        run: |
-          set -euo pipefail
-          cat > Directory.Build.targets <<'EOF'
-          <Project>
-            <Target Name="PrintMauiProps">
-              <Message Text="== Evaluated iOS identifiers ==" Importance="High" />
-              <Message Text="CFBundleIdentifier: $(CFBundleIdentifier)" Importance="High" />
-              <Message Text="BundleIdentifier : $(BundleIdentifier)" Importance="High" />
-              <Message Text="AppBundleId      : $(AppBundleId)" Importance="High" />
-              <Message Text="ApplicationId    : $(ApplicationId)" Importance="High" />
-            </Target>
-          </Project>
-          EOF
-
-      - name: Show evaluated MSBuild properties (should be app.biblequest)
-        run: |
-          set -euo pipefail
-          dotnet msbuild BibleQuestForKids/BibleQuestForKids.csproj \
-            -t:PrintMauiProps \
-            -p:BUNDLE_ID=${{ env.APP_IDENTIFIER }} \
-            -p:TargetFramework=net8.0-ios \
-            -p:RuntimeIdentifier=ios-arm64 \
-            -v:m
-
-      # 📦 Publish (ArchiveOnBuild => IPA) with binlog
       - name: Publish .NET MAUI iOS app
-        run: >-
+        run: >
           dotnet publish BibleQuestForKids/BibleQuestForKids.csproj
           -c Release
           -f net8.0-ios
           -p:RuntimeIdentifier=ios-arm64
-          -p:ArchiveOnBuild=true
-          -p:BUNDLE_ID=${{ env.APP_IDENTIFIER }}
+          -p:BuildIpa=true
+          -p:ApplicationId=${{ env.APP_IDENTIFIER }}
+          -p:CFBundleIdentifier=${{ env.APP_IDENTIFIER }}
           -p:ApplicationDisplayVersion=${{ env.APP_DISPLAY_VERSION }}
           -p:ApplicationVersion=${{ env.APP_BUILD_NUMBER }}
-          -p:CodesignKey="${{ env.CODESIGN_KEY }}"
-          -p:CodesignProvision="${{ env.CODESIGN_PROVISION }}"
-          -p:CodesignTeamId=${{ env.TEAM_ID }}
-          -bl:"$RUNNER_TEMP/publish.binlog"
-          --verbosity minimal
-
-      - name: Upload MSBuild binlog
-        uses: actions/upload-artifact@v4
-        with:
-          name: msbuild-binlog
-          path: ${{ runner.temp }}/publish.binlog
-          if-no-files-found: warn
-
-      - name: Summarize publish output
-        run: |
-          set -euo pipefail
-          PUBLISH_ROOT='BibleQuestForKids/bin/Release/net8.0-ios/ios-arm64/publish'
-          test -d "$PUBLISH_ROOT"
-          echo "Contents of $PUBLISH_ROOT:"
-          find "$PUBLISH_ROOT" -maxdepth 2 -type f | sort
-          du -sh "$PUBLISH_ROOT"
+          -p:CodesignKey=${{ env.CODESIGN_KEY }}
+          -p:CodesignProvision=${{ env.CODESIGN_PROVISION }}
+          -p:CodesignTeamId=${{ secrets.TEAM_ID }}
 
       - name: Verify IPA contains dist assets
         run: |
-          set -euo pipefail
           IPA_PATH=$(find BibleQuestForKids/bin/Release/net8.0-ios/ios-arm64/publish -name '*.ipa' | head -1)
-          test -n "$IPA_PATH"
-          echo "Inspecting IPA at $IPA_PATH"
           unzip -q "$IPA_PATH" -d tmp
           APP_DIR=$(ls tmp/Payload)
-          test -f "tmp/Payload/$APP_DIR/wwwroot/dist/index.html"
-          echo '✅ IPA contains dist/index.html'
-          ls -al "tmp/Payload/$APP_DIR/wwwroot/dist" || true
+          if [ ! -f "tmp/Payload/$APP_DIR/wwwroot/dist/index.html" ]; then
+            echo "❌ IPA missing dist/index.html" >&2
+            exit 1
+          fi
+          echo "✅ IPA contains dist/index.html"
 
-      - name: Upload IPA to TestFlight (does not submit to App Store review)
+      - name: Upload IPA to TestFlight
         uses: apple-actions/upload-testflight-build@v1
         with:
           app-path: BibleQuestForKids/bin/Release/net8.0-ios/ios-arm64/publish/*.ipa
@@ -287,4 +152,3 @@ jobs:
         with:
           name: BibleQuestForKids-ipa
           path: BibleQuestForKids/bin/Release/net8.0-ios/ios-arm64/publish/*.ipa
-          if-no-files-found: error
