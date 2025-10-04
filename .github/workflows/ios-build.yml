@@ -140,7 +140,8 @@ jobs:
             -p:CodesignTeamId=${{ secrets.TEAM_ID }} \
             --no-restore
 
-      - name: Verify IPA contains dist assets
+      - name: Locate produced IPA
+        id: locate-ipa
         shell: bash
         run: |
           set -euo pipefail
@@ -149,16 +150,25 @@ jobs:
             echo "❌ IPA not found" >&2
             exit 1
           fi
+          echo "ipa-path=$IPA_PATH" >> "$GITHUB_OUTPUT"
+
+      - name: Verify IPA contains dist assets
+        shell: bash
+        env:
+          IPA_PATH: ${{ steps.locate-ipa.outputs.ipa-path }}
+        run: |
+          set -euo pipefail
           unzip -q "$IPA_PATH" -d tmp-ipa
           APP_DIR=$(ls tmp-ipa/Payload)
           test -s "tmp-ipa/Payload/$APP_DIR/wwwroot/dist/index.html"
           test -s "tmp-ipa/Payload/$APP_DIR/wwwroot/dist/manifest.json"
           echo "✅ IPA contains compiled web assets"
+          rm -rf tmp-ipa
 
       - name: Upload IPA to TestFlight
         uses: apple-actions/upload-testflight-build@v1
         with:
-          app-path: BibleQuestForKids/bin/Release/net8.0-ios/ios-arm64/publish/*.ipa
+          app-path: ${{ steps.locate-ipa.outputs.ipa-path }}
           issuer-id: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
           api-key-id: ${{ secrets.APP_STORE_CONNECT_KEY_IDENTIFIER }}
           api-private-key: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
@@ -168,4 +178,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: BibleQuestForKids-ipa
-          path: BibleQuestForKids/bin/Release/net8.0-ios/ios-arm64/publish/*.ipa
+          path: ${{ steps.locate-ipa.outputs.ipa-path }}
