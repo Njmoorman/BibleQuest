@@ -1,6 +1,13 @@
 workflows:
   ios-release:
     name: Bible Quest for Kids (iOS)
+    integrations:
+      app_store_connect:
+        # This tells Codemagic to use the configured App Store Connect integration.
+        # You must configure this under your Codemagic UI -> App Settings -> Integrations.
+        # Make sure your key (p8), issuer ID, and key ID are added there.
+        auth: integration
+
     environment:
       vars:
         DOTNET_VERSION: 8.0.301
