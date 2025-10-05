@@ -1,37 +1,47 @@
 workflows:
   ios-release:
-    name: Bible Quest for Kids (iOS)
+    name: iOS Release Build
+    environment:
+      groups:
+        - appstore_credentials # references your Codemagic saved credentials
+      vars:
+        XCODE_WORKSPACE: "BibleQuestForKids.sln"
+        XCODE_SCHEME: "BibleQuestForKids"
+        APP_IDENTIFIER: "app.biblequest"
+        TEAM_ID: "2989BXM365"
+        BUNDLE_ID: "app.biblequest"
+      xcode: latest
+      cocoapods: default
     integrations:
       app_store_connect:
-        # This tells Codemagic to use the configured App Store Connect integration.
-        # You must configure this under your Codemagic UI -> App Settings -> Integrations.
-        # Make sure your key (p8), issuer ID, and key ID are added there.
-        auth: integration
-
-    environment:
-      vars:
-        DOTNET_VERSION: 8.0.301
-        APP_IDENTIFIER: app.biblequest
-        APP_DISPLAY_VERSION: 1.1.0
-      xcode: latest
-      node: latest
-
+        name: appstore_credentials
+        type: appstoreconnect
+        group: appstore_credentials
+        source: environment
+        filePath: ""
     scripts:
-      - name: Install MAUI workloads
+      - name: Install .NET and MAUI workloads
         script: |
+          export PATH="$PATH:$HOME/.dotnet/tools"
           dotnet workload install maui-ios
-          dotnet restore BibleQuestForKids/BibleQuestForKids.csproj
+          dotnet workload list
 
-      - name: Build iOS app
+      - name: Restore and build MAUI iOS app
         script: |
+          dotnet restore BibleQuestForKids/BibleQuestForKids.csproj
           dotnet publish BibleQuestForKids/BibleQuestForKids.csproj \
             -c Release \
             -f net8.0-ios \
+            -p:ArchiveOnBuild=true \
             -p:RuntimeIdentifier=ios-arm64 \
-            -p:BuildIpa=true \
-            -p:ApplicationId=$APP_IDENTIFIER \
-            -p:ApplicationDisplayVersion=$APP_DISPLAY_VERSION \
-            -p:ApplicationVersion=$(date +%s)
+            -p:CodesignKey="Apple Distribution: Jordy Moorman (2989BXM365)" \
+            -p:CodesignTeamId=2989BXM365 \
+            -p:ApplicationDisplayVersion=1.1.0 \
+            -p:ApplicationVersion=1
+
+      - name: Locate IPA
+        script: |
+          find BibleQuestForKids/bin/Release/net8.0-ios/ios-arm64/publish -name "*.ipa" -print
 
     artifacts:
       - BibleQuestForKids/bin/Release/net8.0-ios/ios-arm64/publish/*.ipa
