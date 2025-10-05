@@ -3,22 +3,17 @@ workflows:
     name: iOS Release Build
     environment:
       groups:
-        - appstore_credentials # references your Codemagic saved credentials
+        - appstore_credentials # must match your saved Codemagic group name
       vars:
-        XCODE_WORKSPACE: "BibleQuestForKids.sln"
-        XCODE_SCHEME: "BibleQuestForKids"
         APP_IDENTIFIER: "app.biblequest"
         TEAM_ID: "2989BXM365"
         BUNDLE_ID: "app.biblequest"
       xcode: latest
       cocoapods: default
+
     integrations:
-      app_store_connect:
-        name: appstore_credentials
-        type: appstoreconnect
-        group: appstore_credentials
-        source: environment
-        filePath: ""
+      app_store_connect: appstore_credentials  # ✅ simplified reference (string only)
+
     scripts:
       - name: Install .NET and MAUI workloads
         script: |
@@ -48,5 +43,5 @@ workflows:
 
     publishing:
       app_store_connect:
-        auth: integration
+        auth: integration   # ✅ tells Codemagic to use the integration above
         submit_to_testflight: true
