@@ -8,11 +8,13 @@ workflows:
         APP_DISPLAY_VERSION: 1.1.0
       xcode: latest
       node: latest
+
     scripts:
       - name: Install MAUI workloads
         script: |
           dotnet workload install maui-ios
           dotnet restore BibleQuestForKids/BibleQuestForKids.csproj
+
       - name: Build iOS app
         script: |
           dotnet publish BibleQuestForKids/BibleQuestForKids.csproj \
@@ -29,8 +31,5 @@ workflows:
 
     publishing:
       app_store_connect:
-        auth: api_key
-        key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
-        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
-        private_key: $APP_STORE_CONNECT_PRIVATE_KEY
+        auth: integration
         submit_to_testflight: true
