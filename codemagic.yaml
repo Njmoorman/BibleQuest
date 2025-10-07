@@ -6,15 +6,9 @@ workflows:
         BUNDLE_ID: app.biblequest
         TEAM_ID: 2989BXM365
       xcode: latest
+
     integrations:
       app_store_connect: appstore_credentials
-
-    signing:
-      ios:
-        certificates:
-          - Jordy Moorman Distribution
-        provisioning_profiles:
-          - BibleQuest_AppStore_Distribution_ProvProfile
 
     scripts:
       - name: Install .NET MAUI
@@ -34,9 +28,8 @@ workflows:
             -p:RuntimeIdentifier=ios-arm64 \
             -p:BuildIpa=true \
             -p:ApplicationId=$BUNDLE_ID \
-            -p:CodesignKey="iPhone Distribution: Jordy Moorman ($TEAM_ID)" \
-            -p:CodesignProvision="BibleQuest_AppStore_Distribution_ProvProfile" \
-            -p:TeamId=$TEAM_ID
+            -p:TeamId=$TEAM_ID \
+            -p:CodesignTeamId=$TEAM_ID
 
     artifacts:
       - BibleQuestForKids/bin/Release/net8.0-ios/ios-arm64/publish/*.ipa
