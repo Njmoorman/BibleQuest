@@ -1,47 +1,47 @@
 workflows:
   ios-release:
-    name: iOS Release Build
+    name: BibleQuest iOS Release
     environment:
-      groups:
-        - appstore_credentials # must match your saved Codemagic group name
       vars:
-        APP_IDENTIFIER: "app.biblequest"
-        TEAM_ID: "2989BXM365"
-        BUNDLE_ID: "app.biblequest"
+        BUNDLE_ID: app.biblequest
+        TEAM_ID: 2989BXM365
       xcode: latest
-      cocoapods: default
-
     integrations:
-      app_store_connect: appstore_credentials  # ✅ simplified reference (string only)
+      app_store_connect: appstore_credentials
+
+    signing:
+      ios:
+        certificates:
+          - Jordy Moorman Distribution
+        provisioning_profiles:
+          - BibleQuest_AppStore_Distribution_ProvProfile
 
     scripts:
-      - name: Install .NET and MAUI workloads
+      - name: Install .NET MAUI
         script: |
-          export PATH="$PATH:$HOME/.dotnet/tools"
-          dotnet workload install maui-ios
-          dotnet workload list
+          dotnet workload install maui
 
-      - name: Restore and build MAUI iOS app
+      - name: Restore and Build
         script: |
           dotnet restore BibleQuestForKids/BibleQuestForKids.csproj
+          dotnet build BibleQuestForKids/BibleQuestForKids.csproj -c Release -f net8.0-ios
+
+      - name: Publish IPA
+        script: |
           dotnet publish BibleQuestForKids/BibleQuestForKids.csproj \
             -c Release \
             -f net8.0-ios \
-            -p:ArchiveOnBuild=true \
             -p:RuntimeIdentifier=ios-arm64 \
-            -p:CodesignKey="Apple Distribution: Jordy Moorman (2989BXM365)" \
-            -p:CodesignTeamId=2989BXM365 \
-            -p:ApplicationDisplayVersion=1.1.0 \
-            -p:ApplicationVersion=1
-
-      - name: Locate IPA
-        script: |
-          find BibleQuestForKids/bin/Release/net8.0-ios/ios-arm64/publish -name "*.ipa" -print
+            -p:BuildIpa=true \
+            -p:ApplicationId=$BUNDLE_ID \
+            -p:CodesignKey="iPhone Distribution: Jordy Moorman ($TEAM_ID)" \
+            -p:CodesignProvision="BibleQuest_AppStore_Distribution_ProvProfile" \
+            -p:TeamId=$TEAM_ID
 
     artifacts:
       - BibleQuestForKids/bin/Release/net8.0-ios/ios-arm64/publish/*.ipa
 
     publishing:
       app_store_connect:
-        auth: integration   # ✅ tells Codemagic to use the integration above
+        auth: integration
         submit_to_testflight: true
